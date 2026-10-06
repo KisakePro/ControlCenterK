@@ -13,11 +13,12 @@ namespace ControlCenterK
     {
         readonly Engine engine;
         readonly Panel side, content;
-        readonly NavButton navCtl, navRoute, navAudio, navSettings;
+        readonly NavButton navCtl, navRoute, navAudio, navMouse, navSettings;
         readonly Label capProfile;
         // Pages créées à la demande : un module désactivé n'a pas de page en mémoire.
         ControllerPage pCtl;
         RouterPage pRoute;
+        MousePage pMouse;
         AudioPage pAudio;
         SettingsPage pSettings;
         string current;
@@ -50,8 +51,10 @@ namespace ControlCenterK
             navCtl = new NavButton(Glyphs.Mixer, "Contrôleur");
             navRoute = new NavButton(Glyphs.Route, "Routage");
             navAudio = new NavButton(Glyphs.Speaker, "Périphériques audio");
+            navMouse = new NavButton(Glyphs.Mouse, "Souris");
             navSettings = new NavButton(Glyphs.Settings, "Paramètres");
-            foreach (var n in new[] { navCtl, navRoute, navAudio, navSettings }) side.Controls.Add(n);
+            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navSettings }) side.Controls.Add(n);
+            navMouse.Click += (s, e) => ShowPage("mouse");
             navCtl.Click += (s, e) => ShowPage("ctl");
             navRoute.Click += (s, e) => ShowPage("route");
             navAudio.Click += (s, e) => ShowPage("audio");
@@ -131,10 +134,11 @@ namespace ControlCenterK
             var cfg = engine.Cfg;
             navCtl.Visible = cfg.ModMidi;
             navRoute.Visible = cfg.ModRouter;
+            navMouse.Visible = cfg.ModMouse;
             int y = Theme.S(96);
-            foreach (var n in new[] { navCtl, navRoute, navAudio })
+            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse })
             {
-                if ((n == navCtl && !cfg.ModMidi) || (n == navRoute && !cfg.ModRouter)) continue;
+                if ((n == navCtl && !cfg.ModMidi) || (n == navRoute && !cfg.ModRouter) || (n == navMouse && !cfg.ModMouse)) continue;
                 n.SetBounds(0, y, side.Width, n.Height);
                 y += n.Height + Theme.S(4);
             }
@@ -158,6 +162,7 @@ namespace ControlCenterK
                 case "ctl": page = pCtl ?? (pCtl = Add(new ControllerPage(engine))); break;
                 case "route": page = pRoute ?? (pRoute = Add(new RouterPage(engine))); break;
                 case "audio": page = pAudio ?? (pAudio = Add(new AudioPage(engine))); break;
+                case "mouse": page = pMouse ?? (pMouse = Add(new MousePage(engine.Cfg))); break;
                 default: key = "settings"; page = pSettings ?? (pSettings = Add(new SettingsPage(engine))); break;
             }
             current = key;
@@ -165,6 +170,7 @@ namespace ControlCenterK
             navCtl.Selected = key == "ctl";
             navRoute.Selected = key == "route";
             navAudio.Selected = key == "audio";
+            navMouse.Selected = key == "mouse";
             navSettings.Selected = key == "settings";
             if (page == pAudio) pAudio.Reload();
             if (page == pSettings) pSettings.RefreshInfo();
@@ -187,8 +193,9 @@ namespace ControlCenterK
                 var cfg = engine.Cfg;
                 if (!cfg.ModMidi && pCtl != null) { content.Controls.Remove(pCtl); pCtl.Dispose(); pCtl = null; }
                 if (!cfg.ModRouter && pRoute != null) { content.Controls.Remove(pRoute); pRoute.Dispose(); pRoute = null; }
+                if (!cfg.ModMouse && pMouse != null) { content.Controls.Remove(pMouse); pMouse.Dispose(); pMouse = null; }
                 LayoutNav();
-                if ((current == "ctl" && !cfg.ModMidi) || (current == "route" && !cfg.ModRouter)) ShowPage("settings");
+                if ((current == "ctl" && !cfg.ModMidi) || (current == "route" && !cfg.ModRouter) || (current == "mouse" && !cfg.ModMouse)) ShowPage("settings");
                 UpdateStatus();
                 side.Invalidate();
             });

@@ -179,6 +179,8 @@ namespace ControlCenterK
         public string NotifiedVersion { get; set; }              // dernière version annoncée (notification affichée une seule fois)
         public bool ModMidi { get; set; }                        // module "Contrôleur MIDI"
         public bool ModRouter { get; set; }                      // module "Routage audio"
+        public bool ModMouse { get; set; }                       // module "Souris"
+        public MouseConfig Mouse { get; set; }
         public RouterConfig Router { get; set; }
         public int Jitter { get; set; }                          // seuil anti-tremblement (0 = désactivé)
         public Dictionary<string, int> ControlValues { get; set; } // dernière position connue des faders / potentiomètres
@@ -192,6 +194,7 @@ namespace ControlCenterK
         {
             Jitter = 3;
             ControlValues = new Dictionary<string, int>();
+            Mouse = new MouseConfig();
             ModMidi = true;
             AutoUpdate = true;
             Router = new RouterConfig();
@@ -248,6 +251,8 @@ namespace ControlCenterK
             if (Curve <= 0 || Curve > 5) Curve = 1.0;
             if (Jitter < 0 || Jitter > 20) Jitter = 3;
             if (ControlValues == null) ControlValues = new Dictionary<string, int>();
+            if (Mouse == null) Mouse = new MouseConfig();
+            Mouse.Fix();
             if (Router == null) Router = new RouterConfig();
             Router.Fix();
             if (Theme == null) Theme = new ThemeDef { Name = "Bleu nuit", Accent = "#4C8DFF", Base = "#AAB4E1", Intensity = 1 };
@@ -500,6 +505,6 @@ namespace ControlCenterK
         public const string Volume = "\uE767", Mic = "\uE720", Speaker = "\uE7F5", Headphone = "\uE7F6",
             App = "\uE7C4", Apps = "\uE71D", Focus = "\uE7F4", System = "\uE770", Settings = "\uE713",
             Mixer = "\uE9E9", Close = "\uE711", Add = "\uE710", Chevron = "\uE70D", Refresh = "\uE72C",
-            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Route = "\uE8AB", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
+            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
     }
 }

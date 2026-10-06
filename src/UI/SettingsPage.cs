@@ -232,7 +232,9 @@ namespace ControlCenterK
                 cfg.ModMidi, v => cfg.ModMidi = v);
             AddModule(Theme.S(70) + Theme.S(66), Glyphs.Route, "Routage audio", "Console façon Voicemeeter : envoyer des entrées vers plusieurs sorties (casque + enceintes…).",
                 cfg.ModRouter, v => cfg.ModRouter = v);
-            modCard.Height = Theme.S(70) + 2 * Theme.S(66) + Theme.S(8);
+            AddModule(Theme.S(70) + 2 * Theme.S(66), Glyphs.Mouse, "Souris", "Réglages des souris Corsair (DPI, fréquence, éclairage) et boutons : touches, raccourcis, macros.",
+                cfg.ModMouse, v => cfg.ModMouse = v);
+            modCard.Height = Theme.S(70) + 3 * Theme.S(66) + Theme.S(8);
         }
 
         void AddModule(int y, string glyph, string label, string desc, bool value, Action<bool> apply)
