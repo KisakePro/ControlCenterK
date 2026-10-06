@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Cartographie du routage : entrées à gauche, sorties à droite, une courbe par liaison.</summary>
     class RouteMap : DarkControl

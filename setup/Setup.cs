@@ -11,24 +11,24 @@ using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("MIDI Sound Controller - Installation")]
-[assembly: AssemblyProduct("MIDI Sound Controller")]
+[assembly: AssemblyTitle("ControlCenterK - Installation")]
+[assembly: AssemblyProduct("ControlCenterK")]
 
-namespace MidiSoundControllerSetup
+namespace ControlCenterKSetup
 {
     /// <summary>
-    /// Installateur / désinstallateur de MIDI Sound Controller.
+    /// Installateur / désinstallateur de ControlCenterK.
     /// Installation par utilisateur (pas de droits administrateur) dans %LOCALAPPDATA%\Programs.
     /// L'application est embarquée dans cet exe (ressource "payload.exe").
     /// </summary>
     static class Setup
     {
-        public const string AppName = "MIDI Sound Controller";
-        public const string Version = MidiSoundController.AppVersion.Current;
-        public const string ExeName = "MidiSoundController.exe";
-        public const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\MidiSoundController";
+        public const string AppName = "ControlCenterK";
+        public const string Version = ControlCenterK.AppVersion.Current;
+        public const string ExeName = "ControlCenterK.exe";
+        public const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ControlCenterK";
         public const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        public const string RunValue = "MidiSoundController";
+        public const string RunValue = "ControlCenterK";
 
         [STAThread]
         static void Main(string[] args)
@@ -64,22 +64,34 @@ namespace MidiSoundControllerSetup
 
         public static string ConfigDir
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MidiSoundController"); }
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ControlCenterK"); }
         }
 
         /// <summary>Ferme proprement l'application si elle tourne (elle enregistre ses réglages avant de quitter).</summary>
+        const string Legacy = "MidiSoundController"; // nom de l'application avant ControlCenterK
+
+        static Process[] Running()
+        {
+            var l = new List<Process>(Process.GetProcessesByName("ControlCenterK"));
+            l.AddRange(Process.GetProcessesByName(Legacy));
+            return l.ToArray();
+        }
+
         public static bool CloseRunningApp(IWin32Window owner)
         {
-            if (Process.GetProcessesByName("MidiSoundController").Length == 0) return true;
-            EventWaitHandle q;
-            if (EventWaitHandle.TryOpenExisting(@"Local\MidiSoundController.Quit", out q)) using (q) q.Set();
-            for (int i = 0; i < 40 && Process.GetProcessesByName("MidiSoundController").Length > 0; i++) Thread.Sleep(150);
-            var left = Process.GetProcessesByName("MidiSoundController");
+            if (Running().Length == 0) return true;
+            foreach (var name in new[] { "ControlCenterK", Legacy })
+            {
+                EventWaitHandle q;
+                if (EventWaitHandle.TryOpenExisting(@"Local\" + name + ".Quit", out q)) using (q) q.Set();
+            }
+            for (int i = 0; i < 40 && Running().Length > 0; i++) Thread.Sleep(150);
+            var left = Running();
             if (left.Length == 0) return true;
             if (MessageBox.Show(owner, AppName + " est encore en cours d'exécution.\nLe fermer de force pour continuer ?", AppName,
                     MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return false;
             foreach (var p in left) try { p.Kill(); p.WaitForExit(3000); } catch { }
-            return Process.GetProcessesByName("MidiSoundController").Length == 0;
+            return Running().Length == 0;
         }
 
         public static void Shortcut(string lnk, string target, string args, string description)
@@ -113,7 +125,7 @@ namespace MidiSoundControllerSetup
 
         public static bool StartupEnabled()
         {
-            using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && k.GetValue(RunValue) != null;
+            using (var k = Registry.CurrentUser.OpenSubKey(RunKey)) return k != null && (k.GetValue(RunValue) != null || k.GetValue(Legacy) != null);
         }
 
         /// <summary>Installe (ou met à jour) l'application.</summary>
@@ -151,6 +163,7 @@ namespace MidiSoundControllerSetup
             }
             using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
             {
+                k.DeleteValue(Legacy, false); // ancienne entrée (avant le renommage)
                 if (startup) k.SetValue(RunValue, "\"" + exe + "\" --minimized");
                 else k.DeleteValue(RunValue, false);
             }
@@ -199,6 +212,7 @@ namespace MidiSoundControllerSetup
                 foreach (var root in new[] { Environment.GetEnvironmentVariable("ProgramW6432"), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
                     if (!string.IsNullOrEmpty(root) && File.Exists(Path.Combine(root, "USBip", "usbip.exe"))) usbip = Path.Combine(root, "USBip", "usbip.exe");
                 string cfg = Path.Combine(ConfigDir, "config.json");
+                if (!File.Exists(cfg)) cfg = Path.Combine(Path.GetDirectoryName(ConfigDir), Legacy, "config.json");
                 if (usbip == null || !File.Exists(cfg)) return;
                 var root2 = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(cfg));
                 var router = root2.ContainsKey("Router") ? root2["Router"] as Dictionary<string, object> : null;

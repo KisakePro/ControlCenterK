@@ -28,8 +28,8 @@ jobs:
       - name: Empreinte SHA-256 (vérifiée par la mise à jour intégrée)
         shell: pwsh
         run: |
-          $h = (Get-FileHash dist/MidiSoundController-Setup.exe -Algorithm SHA256).Hash
-          "$h  MidiSoundController-Setup.exe" | Out-File -Encoding ascii dist/MidiSoundController-Setup.exe.sha256
+          $h = (Get-FileHash dist/ControlCenterK-Setup.exe -Algorithm SHA256).Hash
+          "$h  ControlCenterK-Setup.exe" | Out-File -Encoding ascii dist/ControlCenterK-Setup.exe.sha256
 
       - name: Extraire les notes de version du CHANGELOG
         shell: pwsh
@@ -50,5 +50,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" `
-            dist/MidiSoundController-Setup.exe dist/MidiSoundController-Setup.exe.sha256 `
-            --title "MIDI Sound Controller ${{ github.ref_name }}" --notes-file notes.md
+            dist/ControlCenterK-Setup.exe dist/ControlCenterK-Setup.exe.sha256 `
+            --title "ControlCenterK ${{ github.ref_name }}" --notes-file notes.md

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>
     /// Fenêtre principale. Elle est entièrement détruite à la fermeture : seule l'icône de notification
@@ -31,7 +31,7 @@ namespace MidiSoundController
         public MainForm(Engine engine)
         {
             this.engine = engine;
-            Text = "MIDI Sound Controller";
+            Text = "ControlCenterK";
             Icon = Program.AppIcon;
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
@@ -326,7 +326,7 @@ namespace MidiSoundController
             using (var dlg = new SaveFileDialog())
             {
                 dlg.Title = "Exporter le profil";
-                dlg.Filter = "Profil MIDI Sound Controller (*.json)|*.json";
+                dlg.Filter = "Profil ControlCenterK (*.json)|*.json";
                 dlg.FileName = SafeFileName(name) + ".json";
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 try { System.IO.File.WriteAllText(dlg.FileName, json, new System.Text.UTF8Encoding(false)); }
@@ -339,7 +339,7 @@ namespace MidiSoundController
             using (var dlg = new OpenFileDialog())
             {
                 dlg.Title = "Importer un profil";
-                dlg.Filter = "Profil MIDI Sound Controller (*.json)|*.json|Tous les fichiers (*.*)|*.*";
+                dlg.Filter = "Profil ControlCenterK (*.json)|*.json|Tous les fichiers (*.*)|*.*";
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
                 Profile p;
                 try { p = AppConfig.ImportProfile(System.IO.File.ReadAllText(dlg.FileName, System.Text.Encoding.UTF8)); }
@@ -424,8 +424,8 @@ namespace MidiSoundController
             Theme.FillRound(g, Theme.Accent, logo, Theme.S(9));
             TextRenderer.DrawText(g, Glyphs.Mixer, Theme.Icon(14f), Rectangle.Round(logo), Theme.OnAccent,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            TextRenderer.DrawText(g, "MIDI Sound", Theme.Semi(11.5f), new Point(Theme.S(70), Theme.S(25)), Theme.Text);
-            TextRenderer.DrawText(g, "Controller", Theme.Ui(9f), new Point(Theme.S(70), Theme.S(46)), Theme.Muted);
+            TextRenderer.DrawText(g, "ControlCenterK", Theme.Semi(11.5f), new Point(Theme.S(70), Theme.S(25)), Theme.Text);
+            TextRenderer.DrawText(g, "Audio · MIDI", Theme.Ui(9f), new Point(Theme.S(70), Theme.S(46)), Theme.Muted);
         }
     }
 }

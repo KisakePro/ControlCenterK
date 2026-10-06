@@ -4,7 +4,7 @@ using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>
     /// Une cible pilotée par un contrôle.
@@ -318,7 +318,8 @@ namespace MidiSoundController
             public Profile Profile { get; set; }
         }
 
-        const string ProfileFormat = "MidiSoundController.Profile";
+        const string ProfileFormat = "ControlCenterK.Profile";
+        const string LegacyProfileFormat = "MidiSoundController.Profile"; // profils exportés avant le renommage
 
         public static string ExportProfile(Profile p)
         {
@@ -328,8 +329,8 @@ namespace MidiSoundController
         public static Profile ImportProfile(string json)
         {
             var f = new JavaScriptSerializer().Deserialize<ProfileFile>(json);
-            if (f == null || f.Format != ProfileFormat || f.Profile == null)
-                throw new InvalidDataException("Ce fichier n'est pas un profil MIDI Sound Controller.");
+            if (f == null || (f.Format != ProfileFormat && f.Format != LegacyProfileFormat) || f.Profile == null)
+                throw new InvalidDataException("Ce fichier n'est pas un profil ControlCenterK.");
             var p = f.Profile;
             if (p.Controls == null) p.Controls = new Dictionary<string, ControlMapping>();
             foreach (var k in new List<string>(p.Controls.Keys)) FixMapping(p.Controls, k);
@@ -340,13 +341,33 @@ namespace MidiSoundController
 
         public static string Folder
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MidiSoundController"); }
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ControlCenterK"); }
         }
 
         static string FilePath { get { return Path.Combine(Folder, "config.json"); } }
 
+        /// <summary>Ancien dossier de réglages (avant le renommage en ControlCenterK).</summary>
+        public static string LegacyFolder
+        {
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MidiSoundController"); }
+        }
+
+        /// <summary>Premier lancement sous le nouveau nom : reprend les réglages de l'ancien dossier (qui reste en sauvegarde).</summary>
+        static void MigrateLegacyFolder()
+        {
+            try
+            {
+                if (File.Exists(FilePath) || !Directory.Exists(LegacyFolder)) return;
+                Directory.CreateDirectory(Folder);
+                foreach (var f in Directory.GetFiles(LegacyFolder))
+                    File.Copy(f, Path.Combine(Folder, Path.GetFileName(f)), false);
+            }
+            catch { }
+        }
+
         public static AppConfig Load()
         {
+            MigrateLegacyFolder();
             AppConfig c = null;
             try
             {

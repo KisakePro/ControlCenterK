@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Page principale : le contrôleur dessiné + l'éditeur du contrôle sélectionné.</summary>
     class ControllerPage : Panel

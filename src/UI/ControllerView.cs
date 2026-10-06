@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Dessin interactif du nanoKONTROL2 : clic = sélection, affichage en direct des faders / knobs / LED.</summary>
     class ControllerView : DarkControl

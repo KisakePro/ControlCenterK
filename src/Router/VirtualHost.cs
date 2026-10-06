@@ -7,7 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Serveur USB/IP local (127.0.0.1) qui expose les cartes son virtuelles au pilote usbip-win2.</summary>
     sealed class UsbIpServer : IDisposable

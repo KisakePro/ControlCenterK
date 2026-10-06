@@ -2,10 +2,10 @@
 // Pour publier une nouvelle version : modifier Current ici, compléter CHANGELOG.md,
 // puis créer le tag Git correspondant (ex. v1.1.0) : GitHub Actions construit et publie la Release.
 
-[assembly: System.Reflection.AssemblyVersion(MidiSoundController.AppVersion.Current + ".0")]
-[assembly: System.Reflection.AssemblyFileVersion(MidiSoundController.AppVersion.Current + ".0")]
+[assembly: System.Reflection.AssemblyVersion(ControlCenterK.AppVersion.Current + ".0")]
+[assembly: System.Reflection.AssemblyFileVersion(ControlCenterK.AppVersion.Current + ".0")]
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     public static class AppVersion
     {

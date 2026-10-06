@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     #region COM interop (flux audio WASAPI)
 

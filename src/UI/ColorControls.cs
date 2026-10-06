@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Grille de nuances : une colonne par teinte, une ligne par luminosité / saturation.</summary>
     class SwatchGrid : DarkControl

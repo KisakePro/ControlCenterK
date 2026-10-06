@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Tranche de console : entrée ou sortie du routage, dessinée à la main.</summary>
     class RouteStrip : DarkControl

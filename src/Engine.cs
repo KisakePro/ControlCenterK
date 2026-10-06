@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>
     /// Cœur de l'application : reçoit le MIDI, applique les volumes / actions et gère les LED.
@@ -101,7 +101,7 @@ namespace MidiSoundController
         public void Start()
         {
             running = true;
-            thread = new Thread(Loop) { IsBackground = true, Name = "MidiSoundController.Engine" };
+            thread = new Thread(Loop) { IsBackground = true, Name = "ControlCenterK.Engine" };
             thread.SetApartmentState(ApartmentState.MTA);
             thread.Start();
         }

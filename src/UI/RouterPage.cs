@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Page du module "Routage audio" : console entrées → sorties façon Voicemeeter.</summary>
     class RouterPage : Panel

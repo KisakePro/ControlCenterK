@@ -3,10 +3,10 @@ using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyTitle("MIDI Sound Controller")]
-[assembly: System.Reflection.AssemblyProduct("MIDI Sound Controller")]
+[assembly: System.Reflection.AssemblyTitle("ControlCenterK")]
+[assembly: System.Reflection.AssemblyProduct("ControlCenterK")]
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     static class Program
     {
@@ -25,12 +25,12 @@ namespace MidiSoundController
             {
                 // Demande à l'instance en cours de se fermer proprement (utilisé par l'installateur)
                 EventWaitHandle q;
-                if (EventWaitHandle.TryOpenExisting(@"Local\MidiSoundController.Quit", out q)) using (q) q.Set();
+                if (EventWaitHandle.TryOpenExisting(@"Local\ControlCenterK.Quit", out q)) using (q) q.Set();
                 return;
             }
             bool created;
-            using (var mutex = new Mutex(true, @"Local\MidiSoundController.Instance", out created))
-            using (var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\MidiSoundController.Show"))
+            using (var mutex = new Mutex(true, @"Local\ControlCenterK.Instance", out created))
+            using (var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\ControlCenterK.Show"))
             {
                 if (!created)
                 {
@@ -116,7 +116,7 @@ namespace MidiSoundController
             Microsoft.Win32.SystemEvents.SessionEnding += (s, e) => engine.FlushValues();
             AppDomain.CurrentDomain.ProcessExit += (s, e) => engine.FlushValues();
             Application.ApplicationExit += (s, e) => engine.FlushValues();
-            quitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\MidiSoundController.Quit");
+            quitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\ControlCenterK.Quit");
             Host.Cfg = cfg;
             Host.Engine = engine;
             Host.ApplyModules();
@@ -153,7 +153,7 @@ namespace MidiSoundController
                 }
             };
 
-            tray = new NotifyIcon { Icon = Program.TrayIcon, Text = "MIDI Sound Controller", ContextMenuStrip = menu, Visible = true };
+            tray = new NotifyIcon { Icon = Program.TrayIcon, Text = "ControlCenterK", ContextMenuStrip = menu, Visible = true };
             tray.MouseClick += (s, e) => { if (e.Button == MouseButtons.Left) ShowMain(); };
             engine.StateChanged += () => { try { host.BeginInvoke(new Action(UpdateStatus)); } catch { } };
             Host.ModulesChanged += () => { try { host.BeginInvoke(new Action(UpdateStatus)); } catch { } };
@@ -184,7 +184,7 @@ namespace MidiSoundController
             if (notify)
             {
                 cfg.Save();
-                tray.ShowBalloonTip(8000, "Mise à jour disponible", "MIDI Sound Controller " + u.Version + " est disponible. Cliquez pour l'installer.", ToolTipIcon.Info);
+                tray.ShowBalloonTip(8000, "Mise à jour disponible", "ControlCenterK " + u.Version + " est disponible. Cliquez pour l'installer.", ToolTipIcon.Info);
             }
         }
 
@@ -193,7 +193,7 @@ namespace MidiSoundController
             string n = engine.MidiInName;
             statusItem.Text = !cfg.ModMidi ? (Host.Router != null ? "Routage audio actif" : "Modules désactivés")
                 : n != null ? n + " connecté" : "Aucun contrôleur MIDI";
-            string tip = "MIDI Sound Controller — " + statusItem.Text;
+            string tip = "ControlCenterK — " + statusItem.Text;
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
         }
 

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     public enum ControlKind { Fader, Knob, Button }
 

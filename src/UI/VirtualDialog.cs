@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Fenêtre "Entrées / sorties virtuelles" : câbles détectés et création en un clic dans la console.</summary>
     class VirtualDialog : Form
@@ -98,7 +98,7 @@ namespace MidiSoundController
             addc(Theme.Label("Créez de vrais périphériques audio, visibles par tous les logiciels", Theme.Semi(10.5f), Theme.Text, bg));
             var expl = Theme.Label("Chaque périphérique crée dans Windows « Haut-parleurs (Nom) » — ce que les logiciels y jouent arrive dans la console — " +
                 "et « Microphone (Nom) » — ce que la console y envoie, les autres logiciels (Discord, OBS, jeux…) le reçoivent comme un micro. " +
-                "Ils existent tant que MIDI Sound Controller est lancé.", Theme.Ui(8.5f), Theme.Muted, bg);
+                "Ils existent tant que ControlCenterK est lancé.", Theme.Ui(8.5f), Theme.Muted, bg);
             expl.MaximumSize = new Size(Theme.S(700), 0);
             addc(expl);
 

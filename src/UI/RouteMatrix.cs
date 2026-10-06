@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Matrice de routage : une ligne par entrée, une colonne par sortie, un clic = une liaison.</summary>
     class RouteMatrix : DarkControl

@@ -1,4 +1,4 @@
-# MIDI Sound Controller
+# ControlCenterK
 
 Mixeur Windows piloté par un **Korg nanoKONTROL2** : chaque fader / knob règle le volume d'une ou plusieurs cibles
 (sorties, entrées, applications…), les boutons coupent le son, changent le périphérique par défaut ou envoient des touches multimédia.
@@ -12,9 +12,9 @@ build.cmd
 ```
 
 Résultat :
-- `bin\MidiSoundController.exe` : l'application (un seul fichier, utilisable sans installation) ;
-- `dist\MidiSoundController-Setup.exe` : l'installateur à distribuer. Il installe pour l'utilisateur courant, sans droits
-  administrateur, dans `%LOCALAPPDATA%\Programs\MIDI Sound Controller` (raccourcis, démarrage avec Windows en option,
+- `bin\ControlCenterK.exe` : l'application (un seul fichier, utilisable sans installation) ;
+- `dist\ControlCenterK-Setup.exe` : l'installateur à distribuer. Il installe pour l'utilisateur courant, sans droits
+  administrateur, dans `%LOCALAPPDATA%\Programs\ControlCenterK` (raccourcis, démarrage avec Windows en option,
   entrée dans « Applications installées »). Relancé sur une version existante, il fait la mise à jour en gardant les réglages.
 
 ## Utilisation
@@ -74,7 +74,7 @@ src/Program.cs          démarrage, instance unique, icône de notification
 src/Engine.cs           thread worker : MIDI -> volumes / actions / LED
 src/CoreAudio.cs        accès WASAPI (volumes, sessions, périphérique par défaut)
 src/Midi.cs             entrée / sortie MIDI (winmm)
-src/Config.cs           configuration (%APPDATA%\MidiSoundController\config.json)
+src/Config.cs           configuration (%APPDATA%\ControlCenterK\config.json)
 src/Router/*            module de routage : flux WASAPI, rééchantillonnage, mixage
 src/Controller.cs       disposition et CC d'usine du nanoKONTROL2
 src/UI/*                interface sombre
@@ -97,4 +97,4 @@ La vérification automatique peut être désactivée dans les Paramètres.
    git push origin main --tags
    ```
 4. GitHub Actions (`.github/workflows/release.yml`) compile l'application et l'installateur, et publie la Release avec
-   `MidiSoundController-Setup.exe` et son empreinte `.sha256`. Les utilisateurs sont alors prévenus automatiquement.
+   `ControlCenterK-Setup.exe` et son empreinte `.sha256`. Les utilisateurs sont alors prévenus automatiquement.

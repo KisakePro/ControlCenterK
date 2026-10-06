@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>
     /// Reconnaissance des périphériques virtuels (câbles audio, Voicemeeter, Elgato Wave Link…).

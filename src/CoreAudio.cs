@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     public enum Flow { Render = 0, Capture = 1 }
 

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>Liste des applications détectées (sessions audio + fenêtres ouvertes). Utilisé seulement par l'UI.</summary>
     static class Catalog

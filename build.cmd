@@ -1,5 +1,5 @@
 @echo off
-rem Compile MIDI Sound Controller et son installateur avec le compilateur C# fourni par Windows (.NET Framework 4.8).
+rem Compile ControlCenterK et son installateur avec le compilateur C# fourni par Windows (.NET Framework 4.8).
 rem Aucune installation necessaire.
 setlocal
 cd /d "%~dp0"
@@ -18,15 +18,15 @@ if not exist src\app.ico (
 rem 2. Application
 "%CSC%" /nologo /unsafe /codepage:65001 /target:winexe /optimize+ /platform:anycpu ^
   /win32manifest:src\app.manifest /win32icon:src\app.ico ^
-  /out:bin\MidiSoundController.exe %REFS% /recurse:src\*.cs || goto :fail
-echo OK : bin\MidiSoundController.exe
+  /out:bin\ControlCenterK.exe %REFS% /recurse:src\*.cs || goto :fail
+echo OK : bin\ControlCenterK.exe
 
 rem 3. Installateur (l'application y est embarquee)
 "%CSC%" /nologo /codepage:65001 /target:winexe /optimize+ /platform:anycpu ^
   /win32manifest:setup\setup.manifest /win32icon:src\app.ico ^
-  /resource:bin\MidiSoundController.exe,payload.exe ^
-  /out:dist\MidiSoundController-Setup.exe %REFS% /r:Microsoft.CSharp.dll setup\Setup.cs src\Version.cs || goto :fail
-echo OK : dist\MidiSoundController-Setup.exe
+  /resource:bin\ControlCenterK.exe,payload.exe ^
+  /out:dist\ControlCenterK-Setup.exe %REFS% /r:Microsoft.CSharp.dll setup\Setup.cs src\Version.cs || goto :fail
+echo OK : dist\ControlCenterK-Setup.exe
 exit /b 0
 
 :fail

@@ -8,7 +8,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Web.Script.Serialization;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     public class UpdateInfo
     {
@@ -37,7 +37,7 @@ namespace MidiSoundController
         {
             ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2
             var wc = new WebClient();
-            wc.Headers.Add("User-Agent", "MidiSoundController/" + AppVersion.Current);
+            wc.Headers.Add("User-Agent", "ControlCenterK/" + AppVersion.Current);
             return wc;
         }
 
@@ -131,7 +131,7 @@ namespace MidiSoundController
             if (u == null || u.SetupUrl == null) return "Cette version ne contient pas d'installateur.";
             if (!u.SetupUrl.StartsWith("https://github.com/" + AppVersion.Repo + "/", StringComparison.OrdinalIgnoreCase))
                 return "Lien de téléchargement inattendu : mise à jour annulée.";
-            string path = Path.Combine(Path.GetTempPath(), "MidiSoundController-Setup-" + u.Version + ".exe");
+            string path = Path.Combine(Path.GetTempPath(), "ControlCenterK-Setup-" + u.Version + ".exe");
             try
             {
                 using (var wc = Client())

@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     /// <summary>
     /// Carte son USB virtuelle (USB Audio Class 1.0, 48 kHz, stéréo 16 bits), exposée à Windows via USB/IP.
@@ -49,7 +49,8 @@ namespace MidiSoundController
             playIface = HasPlay ? 1 : -1;
             micIface = HasMic ? (HasPlay ? 2 : 1) : -1;
             numIfaces = 1 + (HasPlay ? 1 : 0) + (HasMic ? 1 : 0);
-            strings = new[] { null, "MIDI Sound Controller", name, "MSC" + id.ToUpperInvariant() };
+            // le numéro de série garde son préfixe historique "MSC" : le changer créerait de nouveaux appareils dans Windows
+            strings = new[] { null, "ControlCenterK", name, "MSC" + id.ToUpperInvariant() };
             deviceDesc = new byte[]
             {
                 18, 1, 0x00, 0x02, 0, 0, 0, 64,

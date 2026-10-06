@@ -5,7 +5,7 @@ using System.Globalization;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace MidiSoundController
+namespace ControlCenterK
 {
     class SettingsPage : Panel
     {
@@ -93,7 +93,7 @@ namespace MidiSoundController
             reset.Click += (s, e) =>
             {
                 engine.ResetLearned();
-                MessageBox.Show(FindForm(), "Les CC appris ont été remis aux valeurs d'usine du nanoKONTROL2.", "MIDI Sound Controller");
+                MessageBox.Show(FindForm(), "Les CC appris ont été remis aux valeurs d'usine du nanoKONTROL2.", "ControlCenterK");
             };
             AddRow("CC appris (MIDI learn)", "Remet tous les contrôles sur le mapping d'usine du nanoKONTROL2.", reset);
             card.Height = y + Theme.S(8);
@@ -471,14 +471,25 @@ namespace MidiSoundController
 
     static class Startup
     {
-        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run", ValueName = "MidiSoundController";
+        const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run", ValueName = "ControlCenterK";
 
+        const string LegacyValueName = "MidiSoundController";
+
+        /// <summary>Démarrage automatique actif ? Convertit au passage l'entrée enregistrée sous l'ancien nom.</summary>
         public static bool IsEnabled()
         {
             try
             {
-                using (var k = Registry.CurrentUser.OpenSubKey(RunKey, false))
-                    return k != null && k.GetValue(ValueName) != null;
+                using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true))
+                {
+                    if (k == null) return false;
+                    if (k.GetValue(LegacyValueName) != null)
+                    {
+                        k.DeleteValue(LegacyValueName, false);
+                        k.SetValue(ValueName, "\"" + Application.ExecutablePath + "\" --minimized");
+                    }
+                    return k.GetValue(ValueName) != null;
+                }
             }
             catch { return false; }
         }
