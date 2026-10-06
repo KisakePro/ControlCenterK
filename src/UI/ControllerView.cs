@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 namespace ControlCenterK
 {
-    /// <summary>Dessin interactif du nanoKONTROL2 : clic = sélection, affichage en direct des faders / knobs / LED.</summary>
+    /// <summary>Dessin interactif du contrôleur MIDI : clic = sélection, affichage en direct des faders / knobs / LED.</summary>
     class ControllerView : DarkControl
     {
         readonly Engine engine;
@@ -16,7 +16,7 @@ namespace ControlCenterK
         PointF off;
 
         public event Action<string> ControlClicked;
-        public Func<int, string> StripLabel;
+        public Func<string, string> StripLabel;
         public Func<string, bool> IsAssigned;
 
         static readonly StringFormat Center = new StringFormat
@@ -71,8 +71,8 @@ namespace ControlCenterK
         void Calc()
         {
             float pad = Theme.S(2);
-            sc = Math.Max(0.1f, Math.Min((Width - 2 * pad) / NanoKontrol2.W, (Height - 2 * pad) / NanoKontrol2.H));
-            off = new PointF((Width - NanoKontrol2.W * sc) / 2, (Height - NanoKontrol2.H * sc) / 2);
+            sc = Math.Max(0.1f, Math.Min((Width - 2 * pad) / Controllers.Current.W, (Height - 2 * pad) / Controllers.Current.H));
+            off = new PointF((Width - Controllers.Current.W * sc) / 2, (Height - Controllers.Current.H * sc) / 2);
         }
 
         RectangleF Map(RectangleF r)
@@ -82,7 +82,7 @@ namespace ControlCenterK
 
         string HitTest(Point p)
         {
-            foreach (var d in NanoKontrol2.All)
+            foreach (var d in Controllers.Current.Controls)
             {
                 var r = Map(d.Rect);
                 r.Inflate(4 * sc, 4 * sc);
@@ -116,7 +116,7 @@ namespace ControlCenterK
             base.OnMouseMove(e);
             if (active != null)
             {
-                var d = NanoKontrol2.Get(active);
+                var d = Controllers.Get(active);
                 if (d.Kind == ControlKind.Fader) Send(active, FaderValueAt(d, e.Y));
                 else if (d.Kind == ControlKind.Knob) Send(active, Clamp(dragStartValue + (int)Math.Round((dragStartY - e.Y) * 127.0 / Theme.S(160))));
                 return;
@@ -125,7 +125,7 @@ namespace ControlCenterK
             if (h != hover)
             {
                 hover = h;
-                var hd = NanoKontrol2.Get(h);
+                var hd = Controllers.Get(h);
                 Cursor = hd == null ? Cursors.Default : hd.Kind == ControlKind.Button ? Cursors.Hand : Cursors.SizeNS;
                 Invalidate();
             }
@@ -141,7 +141,7 @@ namespace ControlCenterK
         {
             base.OnMouseUp(e);
             if (e.Button != MouseButtons.Left || active == null) return;
-            var d = NanoKontrol2.Get(active);
+            var d = Controllers.Get(active);
             if (d.Kind == ControlKind.Button) engine.SetFromUi(active, 0); // relâchement du bouton
             active = null;
             Capture = false;
@@ -151,7 +151,7 @@ namespace ControlCenterK
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
-            var d = NanoKontrol2.Get(HitTest(e.Location));
+            var d = Controllers.Get(HitTest(e.Location));
             if (d == null || d.Kind == ControlKind.Button) return;
             int step = (ModifierKeys & Keys.Shift) != 0 ? 1 : 4;
             int cur = Math.Max(0, engine.GetValue(d.Id));
@@ -175,7 +175,7 @@ namespace ControlCenterK
                 return;
             }
             if (e.Button != MouseButtons.Left) return;
-            var d = NanoKontrol2.Get(h);
+            var d = Controllers.Get(h);
             active = h;
             Capture = true;
             dragStartY = e.Y;
@@ -194,7 +194,8 @@ namespace ControlCenterK
             Calc();
 
             // Corps du contrôleur
-            var body = new RectangleF(off.X, off.Y, NanoKontrol2.W * sc, NanoKontrol2.H * sc);
+            var model = Controllers.Current;
+            var body = new RectangleF(off.X, off.Y, model.W * sc, model.H * sc);
             using (var p = Theme.Round(body, 16 * sc))
             using (var br = new LinearGradientBrush(body, Theme.Card, Theme.Mix(Theme.Bg, Color.Black, 0.35f), 90f))
             {
@@ -202,30 +203,31 @@ namespace ControlCenterK
                 using (var pen = new Pen(Theme.Border, Math.Max(1f, 1.5f * sc))) g.DrawPath(pen, p);
             }
 
-            DrawLabel(g, "nanoKONTROL2", new RectangleF(25, 10, 250, 24), 15, Theme.Muted, true, false);
+            DrawLabel(g, model.Title, model.TitleRect, 15, Theme.Muted, true, false);
             using (var pen = new Pen(Color.FromArgb(40, 43, 52), Math.Max(1f, 1.2f * sc)))
-                g.DrawLine(pen, off.X + 292 * sc, off.Y + 14 * sc, off.X + 292 * sc, off.Y + 286 * sc);
+                foreach (var l in model.Lines)
+                    g.DrawLine(pen, off.X + l.X * sc, off.Y + l.Y * sc, off.X + l.Width * sc, off.Y + l.Height * sc);
+            foreach (var t in model.Texts) DrawLabel(g, t.Value, t.Key, 10, Theme.Dim, true, false);
 
-            DrawLabel(g, "TRACK", new RectangleF(25, 38, 120, 16), 10, Theme.Dim, true, false);
-            DrawLabel(g, "CYCLE", new RectangleF(25, 112, 60, 16), 10, Theme.Dim, true, false);
-            DrawLabel(g, "MARKER", new RectangleF(105, 112, 120, 16), 10, Theme.Dim, true, false);
-            DrawLabel(g, "TRANSPORT", new RectangleF(25, 192, 200, 16), 10, Theme.Dim, true, false);
-
-            // Étiquettes des tranches (style "scribble strip")
-            for (int i = 0; i < 8; i++)
+            // Étiquettes des cibles (style "scribble strip")
+            foreach (var d in model.Controls)
             {
-                float x = NanoKontrol2.StripX + i * NanoKontrol2.StripW;
-                var lr = Map(new RectangleF(x + 4, 10, 78, 24));
-                string label = StripLabel != null ? StripLabel(i) : null;
+                if (d.LabelRect.IsEmpty) continue;
+                var lr = Map(d.LabelRect);
+                string label = StripLabel != null ? StripLabel(d.Id) : null;
                 bool has = !string.IsNullOrEmpty(label);
                 Theme.FillRound(g, has ? Theme.Mix(Theme.Card, Theme.Accent, 0.18f) : Theme.Surface, lr, 5 * sc);
-                var nr = new RectangleF(lr.X + 5 * sc, lr.Y, 12 * sc, lr.Height);
-                using (var b = new SolidBrush(has ? Theme.Accent : Theme.Dim)) g.DrawString((i + 1).ToString(), Px("Segoe UI", 10 * sc, FontStyle.Bold), b, nr, Center);
-                var tr = new RectangleF(lr.X + 17 * sc, lr.Y, lr.Width - 20 * sc, lr.Height);
-                using (var b = new SolidBrush(has ? Theme.Text : Theme.Dim)) g.DrawString(has ? label : "—", Px("Segoe UI", 10.5f * sc), b, tr, LeftFmt);
+                float numW = d.Strip >= 0 ? 12 * sc : 0;
+                if (numW > 0)
+                {
+                    var nr = new RectangleF(lr.X + 5 * sc, lr.Y, numW, lr.Height);
+                    using (var b2 = new SolidBrush(has ? Theme.Accent : Theme.Dim)) g.DrawString((d.Strip + 1).ToString(), Px("Segoe UI", 10 * sc, FontStyle.Bold), b2, nr, Center);
+                }
+                var tr = new RectangleF(lr.X + 5 * sc + numW, lr.Y, lr.Width - 8 * sc - numW, lr.Height);
+                using (var b2 = new SolidBrush(has ? Theme.Text : Theme.Dim)) g.DrawString(has ? label : "—", Px("Segoe UI", 10.5f * sc), b2, tr, LeftFmt);
             }
 
-            foreach (var d in NanoKontrol2.All)
+            foreach (var d in Controllers.Current.Controls)
             {
                 switch (d.Kind)
                 {
@@ -325,8 +327,11 @@ namespace ControlCenterK
                 var glow = RectangleF.Inflate(r, 3 * sc, 3 * sc);
                 Theme.FillRound(g, Color.FromArgb(60, Theme.Red), glow, 7 * sc);
             }
-            Theme.FillRound(g, fill, r, 4 * sc);
-            Theme.DrawRound(g, lit ? Theme.Red : Color.FromArgb(56, 60, 72), r, 4 * sc, Math.Max(1f, sc));
+            float rad = d.Pad ? 7 * sc : 4 * sc;
+            if (d.Pad && !lit && !pressed) fill = Color.FromArgb(44, 47, 56);
+            Theme.FillRound(g, fill, r, rad);
+            Theme.DrawRound(g, lit ? Theme.Red : Color.FromArgb(56, 60, 72), r, rad, Math.Max(1f, sc));
+            if (string.IsNullOrEmpty(d.Caption)) return;
             bool symbol = d.Caption.Length > 0 && d.Caption[0] > 0x2000;
             using (var b = new SolidBrush(lit ? Color.White : Theme.Muted))
                 g.DrawString(d.Caption,

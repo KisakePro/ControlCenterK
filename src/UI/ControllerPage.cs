@@ -17,6 +17,11 @@ namespace ControlCenterK
         readonly FlatButton btnLearn;
         readonly ChipsBox chips;
         string sel;
+        readonly Label capModel;
+        readonly DropButton ddModel;
+        readonly FlatButton btnWizard;
+        List<string> wizard;   // assistant « Tout apprendre » : contrôles restant à apprendre
+        int wizardTotal;
         bool showAction, showChips;
 
         public ControllerPage(Engine engine)
@@ -28,6 +33,11 @@ namespace ControlCenterK
 
             title = Theme.Label("Contrôleur", Theme.Semi(18f), Theme.Text, BackColor);
             sub = Theme.Label("Clic gauche : manipuler un fader, un potentiomètre ou un bouton.  Clic droit (ou toucher le contrôle physique) : le configurer.", Theme.Ui(9.5f), Theme.Muted, BackColor);
+            capModel = Theme.Label("MODÈLE", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, BackColor);
+            ddModel = new DropButton();
+            foreach (var mdl in Controllers.All) ddModel.Add(mdl.Id, mdl.Name);
+            ddModel.Value = Controllers.Current.Id;
+            ddModel.ValueChanged += (s, e) => ChangeModel(ddModel.Value);
             capIn = Theme.Label("ENTRÉE MIDI", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, BackColor);
             capOut = Theme.Label("SORTIE MIDI (LED)", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, BackColor);
             ddIn = new DropButton();
@@ -44,6 +54,8 @@ namespace ControlCenterK
             lblActionCap = Theme.Label("ACTION DU BOUTON", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Card);
             lblTargetsCap = Theme.Label("CIBLES", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Card);
             lblHint = Theme.Label("", Theme.Ui(9f), Theme.Muted, Theme.Card);
+            btnWizard = new FlatButton("Tout apprendre") { Glyph = Glyphs.Learn };
+            btnWizard.Click += (s, e) => { if (wizard == null) StartWizard(); else StopWizard(); };
             btnLearn = new FlatButton("MIDI learn") { Glyph = Glyphs.Plug };
             btnLearn.Click += (s, e) => ToggleLearn();
             ddAction = new DropButton();
@@ -51,11 +63,11 @@ namespace ControlCenterK
             chips = new ChipsBox();
             chips.RemoveClicked += OnRemoveTarget;
             chips.AddClicked += OnAddTarget;
-            editor.Controls.AddRange(new Control[] { lblName, lblInfo, btnLearn, lblActionCap, ddAction, lblTargetsCap, chips, lblHint });
+            editor.Controls.AddRange(new Control[] { lblName, lblInfo, btnLearn, btnWizard, lblActionCap, ddAction, lblTargetsCap, chips, lblHint });
 
-            Controls.AddRange(new Control[] { ddIn, ddOut, capIn, capOut, title, sub, view, editor });
+            Controls.AddRange(new Control[] { ddModel, ddIn, ddOut, capModel, capIn, capOut, title, sub, view, editor });
             RefreshMidiLists();
-            SelectControl("F1");
+            SelectControl(Controllers.Current.FirstFader.Id);
         }
 
         #region Mise en page
@@ -71,17 +83,19 @@ namespace ControlCenterK
             if (editor == null) return;
             int pad = Theme.S(28), w = ClientSize.Width, h = ClientSize.Height;
             title.Location = new Point(pad - Theme.S(2), Theme.S(20));
-            int ddW = Theme.S(260);
-            sub.MaximumSize = new Size(Math.Max(Theme.S(200), w - 2 * pad - 2 * ddW - Theme.S(30)), 0);
+            int ddW = Theme.S(210), mdW = Theme.S(250);
+            sub.MaximumSize = new Size(Math.Max(Theme.S(200), w - 2 * pad - 2 * ddW - mdW - Theme.S(50)), 0);
             sub.Location = new Point(pad, title.Bottom + Theme.S(2));
             ddOut.SetBounds(w - pad - ddW, Theme.S(42), ddW, Theme.S(32));
             capOut.Location = new Point(ddOut.Left + Theme.S(2), Theme.S(22));
             ddIn.SetBounds(ddOut.Left - Theme.S(12) - ddW, Theme.S(42), ddW, Theme.S(32));
             capIn.Location = new Point(ddIn.Left + Theme.S(2), Theme.S(22));
+            ddModel.SetBounds(ddIn.Left - Theme.S(12) - mdW, Theme.S(42), mdW, Theme.S(32));
+            capModel.Location = new Point(ddModel.Left + Theme.S(2), Theme.S(22));
 
-            int top = Theme.S(100);
+            int top = Math.Max(Theme.S(100), sub.Bottom + Theme.S(12));
             int vw = w - 2 * pad;
-            int vh = (int)Math.Min(vw * 0.30f, Math.Max(Theme.S(170), h - top - Theme.S(300)));
+            int vh = (int)Math.Min(vw * Controllers.Current.H / Controllers.Current.W, Math.Max(Theme.S(170), h - top - Theme.S(300)));
             view.SetBounds(pad, top, vw, vh);
             int ey = view.Bottom + Theme.S(18);
             editor.SetBounds(pad, ey, vw, Math.Max(Theme.S(160), h - ey - pad));
@@ -95,6 +109,8 @@ namespace ControlCenterK
             lblInfo.Location = new Point(p + Theme.S(1), lblName.Bottom + Theme.S(2));
             btnLearn.FitWidth();
             btnLearn.Location = new Point(w - p - btnLearn.Width, Theme.S(22));
+            btnWizard.FitWidth();
+            btnWizard.Location = new Point(btnLearn.Left - Theme.S(8) - btnWizard.Width, Theme.S(22));
             int y = lblInfo.Bottom + Theme.S(18);
             ddAction.Visible = lblActionCap.Visible = showAction;
             if (showAction)
@@ -124,12 +140,12 @@ namespace ControlCenterK
             lock (AppConfig.Sync) return cfg.Get(id);
         }
 
-        string StripLabel(int i)
+        string StripLabel(string id)
         {
             lock (AppConfig.Sync)
             {
                 ControlMapping m;
-                if (!cfg.Controls.TryGetValue("F" + (i + 1), out m) || m.Targets.Count == 0) return null;
+                if (id == null || !cfg.Controls.TryGetValue(id, out m) || m.Targets.Count == 0) return null;
                 string s = Names.Display(cfg, m.Targets[0]);
                 return m.Targets.Count > 1 ? s + " +" + (m.Targets.Count - 1) : s;
             }
@@ -146,7 +162,7 @@ namespace ControlCenterK
 
         public void SelectControl(string id)
         {
-            var def = NanoKontrol2.Get(id);
+            var def = Controllers.Get(id);
             if (def == null) return;
             sel = id;
             view.Selected = id;
@@ -157,7 +173,8 @@ namespace ControlCenterK
             lblName.Text = def.Label;
             int key = engine.KeyOf(id);
             string kind = def.Kind == ControlKind.Fader ? "Fader" : def.Kind == ControlKind.Knob ? "Potentiomètre" : "Bouton";
-            lblInfo.Text = kind + "  ·  CC " + (key & 0x7F) + "  ·  Canal " + ((key >> 8) + 1);
+            lblInfo.Text = kind + "  ·  " + MidiKey.Describe(key);
+            if (wizard != null) lblInfo.Text = "Touchez ce contrôle sur votre appareil  (" + (wizardTotal - wizard.Count + 1) + " / " + wizardTotal + ")  ·  Échap pour arrêter";
 
             showAction = isBtn;
             if (isBtn)
@@ -165,7 +182,8 @@ namespace ControlCenterK
                 ddAction.Items.Clear();
                 ddAction.Add("", "Aucune action");
                 ddAction.Add("mute", "Muet : basculer les cibles ci-dessous");
-                if (def.Strip >= 0) ddAction.Add("mutestrip", "Muet : basculer le Fader " + (def.Strip + 1));
+                var linked = Controllers.Get(def.Fader);
+                if (linked != null && linked.Id != def.Id) ddAction.Add("mutestrip", "Muet : basculer le " + linked.Label);
                 ddAction.Add("default", "Définir le périphérique par défaut");
                 ddAction.Add("media_play", "Média : Lecture / Pause");
                 ddAction.Add("media_next", "Média : Piste suivante");
@@ -184,7 +202,7 @@ namespace ControlCenterK
                 foreach (var t in m.Targets)
                     chips.Chips.Add(new ChipsBox.Chip { Glyph = Names.Glyph(t), Text = Names.Display(cfg, t) });
 
-            lblHint.Text = Hint(def, action);
+            lblHint.Text = Hint(def, action) + (Controllers.Current.Note != null ? "\n" + Controllers.Current.Name + " : " + Controllers.Current.Note : "");
             UpdateLearnButton();
             LayoutEditor();
             chips.Relayout();
@@ -200,8 +218,9 @@ namespace ControlCenterK
                 case "mute": return "Chaque appui coupe / rétablit le son des cibles. La LED du bouton s'allume quand elles sont muettes.";
                 case "mutestrip":
                     {
-                        string f = StripLabel(def.Strip);
-                        return "Chaque appui coupe / rétablit le son des cibles du Fader " + (def.Strip + 1) +
+                        string f = StripLabel(def.Fader);
+                        var linked = Controllers.Get(def.Fader);
+                        return "Chaque appui coupe / rétablit le son des cibles du " + (linked != null ? linked.Label : "fader") +
                                (f != null ? " (" + f + ")." : " — aucune cible assignée à ce fader pour l'instant.");
                     }
                 case "default": return "Un appui définit ce périphérique comme périphérique par défaut de Windows. La LED indique celui qui est actif.";
@@ -354,22 +373,73 @@ namespace ControlCenterK
 
         void ToggleLearn()
         {
+            if (wizard != null) { NextWizard(); return; } // « Passer » pendant l'assistant
             engine.LearnControl = engine.LearnControl == null ? sel : null;
             UpdateLearnButton();
+        }
+
+        #region Assistant « Tout apprendre »
+
+        void StartWizard()
+        {
+            wizard = new List<string>();
+            foreach (var d in Controllers.Current.Controls) wizard.Add(d.Id);
+            wizardTotal = wizard.Count;
+            NextWizard(false);
+        }
+
+        void NextWizard(bool skip = true)
+        {
+            if (skip && wizard.Count > 0) wizard.RemoveAt(0);
+            if (wizard.Count == 0) { StopWizard(); return; }
+            engine.LearnControl = wizard[0];
+            SelectControl(wizard[0]);
+            UpdateLearnButton();
+        }
+
+        void StopWizard()
+        {
+            wizard = null;
+            engine.LearnControl = null;
+            UpdateLearnButton();
+            if (sel != null) SelectControl(sel);
+        }
+
+        #endregion
+
+        void ChangeModel(string id)
+        {
+            var model = Controllers.Find(id);
+            if (model == null || model == Controllers.Current) return;
+            StopWizard();
+            lock (AppConfig.Sync) cfg.ControllerModel = model.Id;
+            Controllers.Current = model;
+            cfg.Save();
+            engine.ModelChanged();
+            sel = null;
+            SelectControl(model.FirstFader.Id);
+            DoLayout();
+            view.Invalidate();
         }
 
         void UpdateLearnButton()
         {
             bool on = engine.LearnControl != null;
-            btnLearn.Text = on ? "Bougez un contrôle…  (Échap pour annuler)" : "MIDI learn";
-            btnLearn.Primary = on;
+            btnLearn.Text = wizard != null ? "Passer ce contrôle" : on ? "Bougez un contrôle…  (Échap pour annuler)" : "MIDI learn";
+            btnLearn.Primary = on && wizard == null;
+            btnWizard.Text = wizard != null ? "Arrêter l'apprentissage" : "Tout apprendre";
+            btnWizard.Primary = wizard != null;
+            btnWizard.FitWidth();
             btnLearn.FitWidth();
             btnLearn.Location = new Point(editor.Width - Theme.S(22) - btnLearn.Width, Theme.S(22));
+            btnWizard.Location = new Point(btnLearn.Left - Theme.S(8) - btnWizard.Width, Theme.S(22));
             btnLearn.Invalidate();
+            btnWizard.Invalidate();
         }
 
         public void CancelLearn()
         {
+            if (wizard != null) { StopWizard(); return; }
             if (engine.LearnControl == null) return;
             engine.LearnControl = null;
             UpdateLearnButton();
@@ -377,6 +447,7 @@ namespace ControlCenterK
 
         public void OnLearned(string id)
         {
+            if (wizard != null && wizard.Count > 0 && wizard[0] == id) { NextWizard(); return; }
             UpdateLearnButton();
             SelectControl(id);
         }
@@ -385,7 +456,7 @@ namespace ControlCenterK
         public void OnActivity(string moved)
         {
             view.Invalidate();
-            if (moved != null && moved != sel && cfg.AutoSelect && engine.LearnControl == null && Visible)
+            if (moved != null && moved != sel && cfg.AutoSelect && engine.LearnControl == null && wizard == null && Visible)
                 SelectControl(moved);
         }
 

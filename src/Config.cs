@@ -162,7 +162,8 @@ namespace ControlCenterK
         /// <summary>Verrou partagé entre l'UI (qui modifie) et le worker (qui lit).</summary>
         public static readonly object Sync = new object();
 
-        public string MidiIn { get; set; }          // "" = automatique (nanoKONTROL), "-" = aucune
+        public string ControllerModel { get; set; } // modèle de contrôleur ("" = détection automatique)
+        public string MidiIn { get; set; }          // "" = automatique (selon le modèle), "-" = aucune
         public string MidiOut { get; set; }
         public bool StartWithWindows { get; set; }
         public bool StartMinimized { get; set; }
@@ -380,11 +381,19 @@ namespace ControlCenterK
             }
             if (c == null) { c = new AppConfig(); c.ApplyDefaults(); }
             c.Fix();
+            c.persistent = true;
             return c;
         }
 
+        /// <summary>
+        /// Vrai seulement pour la config chargée depuis le disque : une config créée à vide (par exemple dans un test)
+        /// ne peut jamais écraser les réglages de l'utilisateur. Champ privé : non enregistré dans le fichier.
+        /// </summary>
+        bool persistent;
+
         public void Save()
         {
+            if (!persistent) return;
             lock (Sync)
             {
                 try

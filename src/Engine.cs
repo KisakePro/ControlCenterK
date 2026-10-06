@@ -59,8 +59,8 @@ namespace ControlCenterK
             lock (AppConfig.Sync)
                 foreach (var kv in cfg.ControlValues)
                 {
-                    var d = NanoKontrol2.Get(kv.Key);
-                    if (d != null && d.Kind != ControlKind.Button) values[kv.Key] = Math.Max(0, Math.Min(127, kv.Value));
+                    var d = Controllers.Get(kv.Key);
+                    if (d == null || d.Kind != ControlKind.Button) values[kv.Key] = Math.Max(0, Math.Min(127, kv.Value));
                 }
         }
 
@@ -89,8 +89,8 @@ namespace ControlCenterK
             lock (values)
                 foreach (var kv in values)
                 {
-                    var d = NanoKontrol2.Get(kv.Key);
-                    if (d != null && d.Kind != ControlKind.Button) copy[kv.Key] = kv.Value;
+                    var d = Controllers.Get(kv.Key);
+                    if (d == null || d.Kind != ControlKind.Button) copy[kv.Key] = kv.Value;
                 }
             lock (AppConfig.Sync) Cfg.ControlValues = copy;
             Cfg.Save();
@@ -240,7 +240,11 @@ namespace ControlCenterK
         {
             if (want == "-") return -1;
             if (!string.IsNullOrEmpty(want)) return names.IndexOf(want);
-            return names.FindIndex(n => n.IndexOf("nanoKONTROL", StringComparison.OrdinalIgnoreCase) >= 0);
+            var model = Controllers.Current;
+            int i = names.FindIndex(n => Array.Exists(model.PortMatch, p => n.IndexOf(p, StringComparison.OrdinalIgnoreCase) >= 0));
+            if (i >= 0) return i;
+            // sinon : n'importe quel contrôleur connu
+            return names.FindIndex(n => Controllers.Detect(new[] { n }) != null);
         }
 
         /// <summary>Appelé quand Windows signale un changement de périphérique (USB branché, carte son...).</summary>
@@ -259,11 +263,18 @@ namespace ControlCenterK
             if (h != null) h();
         }
 
-        void SendCc(int key, int value)
+        /// <summary>Allume / éteint la LED d'un contrôle (CC ou Note selon le modèle).</summary>
+        void SendLed(int key, bool on)
         {
+            if (key < 0) return;
+            var model = Controllers.Current;
+            int ch = MidiKey.Channel(key);
+            if (ch == MidiKey.AnyChannel) ch = model.LedChannel;
             lock (midiLock)
             {
-                if (midiOut != null) midiOut.Send(0xB0 | ((key >> 8) & 0x0F), key & 0x7F, value);
+                if (midiOut == null) return;
+                if (MidiKey.Type(key) == MsgType.Note) midiOut.Send(0x90 | ch, MidiKey.Number(key), on ? model.LedOn : 0);
+                else midiOut.Send(0xB0 | ch, MidiKey.Number(key), on ? 127 : 0);
             }
         }
 
@@ -278,15 +289,27 @@ namespace ControlCenterK
                 int k;
                 if (Cfg.CcOverrides.TryGetValue(id, out k)) return k;
             }
-            var d = NanoKontrol2.Get(id);
-            return d == null ? -1 : d.Cc;
+            var d = Controllers.Get(id);
+            return d == null ? -1 : d.DefaultKey;
         }
 
         void RebuildMap()
         {
             var map = new Dictionary<int, string>();
-            foreach (var d in NanoKontrol2.All) map[KeyOf(d.Id)] = d.Id;
+            foreach (var d in Controllers.Current.Controls)
+            {
+                int k = KeyOf(d.Id);
+                if (k >= 0) map[k] = d.Id;
+            }
             keyMap = map;
+        }
+
+        /// <summary>Le modèle de contrôleur a changé : nouveau mapping, port MIDI et LED.</summary>
+        public void ModelChanged()
+        {
+            RebuildMap();
+            lock (leds) leds.Clear();
+            OpenMidi();
         }
 
         /// <summary>À appeler après chaque modification de la config par l'UI.</summary>
@@ -309,12 +332,12 @@ namespace ControlCenterK
             lock (AppConfig.Sync)
             {
                 // Si un autre contrôle utilisait déjà ce CC, on échange les deux.
-                foreach (var d in NanoKontrol2.All)
+                foreach (var d in Controllers.Current.Controls)
                 {
                     if (d.Id == id || KeyOfLocked(d) != key) continue;
                     SetKeyLocked(d, old);
                 }
-                SetKeyLocked(NanoKontrol2.Get(id), key);
+                SetKeyLocked(Controllers.Get(id), key);
             }
             ConfigChanged();
         }
@@ -322,12 +345,13 @@ namespace ControlCenterK
         int KeyOfLocked(ControlDef d)
         {
             int k;
-            return Cfg.CcOverrides.TryGetValue(d.Id, out k) ? k : d.Cc;
+            return Cfg.CcOverrides.TryGetValue(d.Id, out k) ? k : d.DefaultKey;
         }
 
         void SetKeyLocked(ControlDef d, int key)
         {
-            if (key == d.Cc) Cfg.CcOverrides.Remove(d.Id);
+            if (key < 0) Cfg.CcOverrides.Remove(d.Id);
+            else if (key == d.DefaultKey) Cfg.CcOverrides.Remove(d.Id);
             else Cfg.CcOverrides[d.Id] = key;
         }
 
@@ -346,9 +370,9 @@ namespace ControlCenterK
             string src = id;
             if (action == "mutestrip")
             {
-                var d = NanoKontrol2.Get(id);
-                if (d == null || d.Strip < 0) return new List<Target>();
-                src = "F" + (d.Strip + 1);
+                var d = Controllers.Get(id);
+                if (d == null || d.Fader == null || d.Fader == id) return new List<Target>();
+                src = d.Fader;
             }
             ControlMapping m;
             return Cfg.Controls.TryGetValue(src, out m) ? new List<Target>(m.Targets) : new List<Target>();
@@ -380,8 +404,13 @@ namespace ControlCenterK
         void Route(int msg)
         {
             int status = msg & 0xFF, d1 = (msg >> 8) & 0x7F, d2 = (msg >> 16) & 0x7F;
-            if ((status & 0xF0) != 0xB0) return; // seuls les Control Change nous intéressent
-            int key = ((status & 0x0F) << 8) | d1;
+            int kind = status & 0xF0, ch = status & 0x0F;
+            MsgType type;
+            if (kind == 0xB0) type = MsgType.Cc;                                 // Control Change
+            else if (kind == 0x90) { type = MsgType.Note; d2 = d2 > 0 ? 127 : 0; } // Note On (vélocité 0 = relâché)
+            else if (kind == 0x80) { type = MsgType.Note; d2 = 0; }              // Note Off
+            else return;
+            int key = MidiKey.Make(type, ch, d1);
 
             string learn = LearnControl;
             if (learn == null) learnSeen.Clear();
@@ -400,8 +429,10 @@ namespace ControlCenterK
             }
 
             string id;
-            if (!keyMap.TryGetValue(key, out id)) return;
-            var def = NanoKontrol2.Get(id);
+            var map = keyMap;
+            if (!map.TryGetValue(key, out id) && !map.TryGetValue(MidiKey.AnyChannelOf(key), out id)) return;
+            var def = Controllers.Get(id);
+            if (def == null) return;
             if (def.Kind != ControlKind.Button)
             {
                 // La position physique est toujours mémorisée (affichage + prochain démarrage)…
@@ -578,7 +609,7 @@ namespace ControlCenterK
             HashSet<string> assigned;
             lock (AppConfig.Sync)
             {
-                foreach (var d in NanoKontrol2.All)
+                foreach (var d in Controllers.Current.Controls)
                 {
                     if (d.Kind != ControlKind.Button) continue;
                     ControlMapping m;
@@ -629,8 +660,8 @@ namespace ControlCenterK
                 leds[id] = on;
             }
             if (!changed) return;
-            if (Cfg.LedFeedback) SendCc(KeyOf(id), on ? 127 : 0);
-            else if (force) SendCc(KeyOf(id), 0);
+            if (Cfg.LedFeedback) SendLed(KeyOf(id), on);
+            else if (force) SendLed(KeyOf(id), false);
             var h = ControlMoved;
             if (h != null) h(null);
         }
@@ -640,12 +671,12 @@ namespace ControlCenterK
         #region Lecture d'état pour l'UI
 
         /// <summary>
-        /// Contrôle manipulé à la souris dans l'interface : même effet qu'un message du nanoKONTROL2
+        /// Contrôle manipulé à la souris dans l'interface : même effet qu'un message du contrôleur
         /// (volume, action du bouton, LED, mémorisation de la position), sans filtre anti-tremblement.
         /// </summary>
         public void SetFromUi(string id, int value)
         {
-            var def = NanoKontrol2.Get(id);
+            var def = Controllers.Get(id);
             if (def == null) return;
             value = Math.Max(0, Math.Min(127, value));
             Post(() =>

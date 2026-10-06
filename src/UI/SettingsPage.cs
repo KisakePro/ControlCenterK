@@ -93,9 +93,9 @@ namespace ControlCenterK
             reset.Click += (s, e) =>
             {
                 engine.ResetLearned();
-                MessageBox.Show(FindForm(), "Les CC appris ont été remis aux valeurs d'usine du nanoKONTROL2.", "ControlCenterK");
+                MessageBox.Show(FindForm(), "Les contrôles appris ont été remis sur le mapping d'usine du contrôleur.", "ControlCenterK");
             };
-            AddRow("CC appris (MIDI learn)", "Remet tous les contrôles sur le mapping d'usine du nanoKONTROL2.", reset);
+            AddRow("CC appris (MIDI learn)", "Remet tous les contrôles sur le mapping d'usine du modèle choisi.", reset);
             card.Height = y + Theme.S(8);
 
             infoCard = new Card();
@@ -228,7 +228,7 @@ namespace ControlCenterK
             var d = Theme.Label("Un module désactivé n'est pas chargé du tout : ni page, ni thread, ni mémoire audio.", Theme.Ui(8.5f), Theme.Muted, Theme.Card);
             d.Location = new Point(Theme.S(20), Theme.S(42));
             modCard.Controls.AddRange(new Control[] { t, d });
-            AddModule(Theme.S(70), Glyphs.Mixer, "Contrôleur MIDI", "Pilote le volume avec le nanoKONTROL2 (mappings, profils, LED).",
+            AddModule(Theme.S(70), Glyphs.Mixer, "Contrôleur MIDI", "Pilote le volume avec un contrôleur MIDI (nanoKONTROL2, X-Touch Mini, APC mini…).",
                 cfg.ModMidi, v => cfg.ModMidi = v);
             AddModule(Theme.S(70) + Theme.S(66), Glyphs.Route, "Routage audio", "Console façon Voicemeeter : envoyer des entrées vers plusieurs sorties (casque + enceintes…).",
                 cfg.ModRouter, v => cfg.ModRouter = v);

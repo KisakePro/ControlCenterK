@@ -110,6 +110,8 @@ namespace ControlCenterK
             cfg.StartWithWindows = Startup.IsEnabled(); // le registre fait foi (l'installateur peut l'avoir réglé)
             if (cfg.StartWithWindows) Startup.Apply(true); // met à jour le chemin si l'exe a été déplacé
 
+            Controllers.Current = Controllers.Find(cfg.ControllerModel)
+                ?? Controllers.Detect(MidiDevices.Inputs()) ?? Controllers.All[0];
             engine = new Engine(cfg);
             engine.Start();
             // Positions des faders : enregistrées quelle que soit la façon dont l'app se ferme
