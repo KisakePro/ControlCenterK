@@ -639,6 +639,33 @@ namespace ControlCenterK
 
         #region Lecture d'état pour l'UI
 
+        /// <summary>
+        /// Contrôle manipulé à la souris dans l'interface : même effet qu'un message du nanoKONTROL2
+        /// (volume, action du bouton, LED, mémorisation de la position), sans filtre anti-tremblement.
+        /// </summary>
+        public void SetFromUi(string id, int value)
+        {
+            var def = NanoKontrol2.Get(id);
+            if (def == null) return;
+            value = Math.Max(0, Math.Min(127, value));
+            Post(() =>
+            {
+                lock (values) values[id] = value;
+                if (def.Kind == ControlKind.Button)
+                {
+                    if (value > 0) Press(id);
+                    else if (!IsLatching(ActionOf(id))) SetLed(id, false, false);
+                }
+                else
+                {
+                    pending[id] = value; // appliqué par la boucle (les mouvements rapides sont fusionnés)
+                    SaveValuesSoon();
+                }
+                var h = ControlMoved;
+                if (h != null) h(null);
+            });
+        }
+
         public int GetValue(string id)
         {
             lock (values)

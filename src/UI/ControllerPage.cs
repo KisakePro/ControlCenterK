@@ -27,7 +27,7 @@ namespace ControlCenterK
             DoubleBuffered = true;
 
             title = Theme.Label("Contrôleur", Theme.Semi(18f), Theme.Text, BackColor);
-            sub = Theme.Label("Cliquez sur un contrôle, ou touchez-le sur votre nanoKONTROL2, pour le configurer.", Theme.Ui(9.5f), Theme.Muted, BackColor);
+            sub = Theme.Label("Clic gauche : manipuler un fader, un potentiomètre ou un bouton.  Clic droit (ou toucher le contrôle physique) : le configurer.", Theme.Ui(9.5f), Theme.Muted, BackColor);
             capIn = Theme.Label("ENTRÉE MIDI", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, BackColor);
             capOut = Theme.Label("SORTIE MIDI (LED)", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, BackColor);
             ddIn = new DropButton();

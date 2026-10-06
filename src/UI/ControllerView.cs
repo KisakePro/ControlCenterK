@@ -91,16 +91,71 @@ namespace ControlCenterK
             return null;
         }
 
+        // --- Manipulation à la souris : clic gauche = agir sur le contrôle, clic droit = l'éditer ---
+        string active;          // contrôle en cours de manipulation (clic gauche maintenu)
+        int dragStartY, dragStartValue;
+
+        static int Clamp(int v) { return v < 0 ? 0 : v > 127 ? 127 : v; }
+
+        int FaderValueAt(ControlDef d, int y)
+        {
+            var r = Map(d.Rect);
+            float top = r.Y + 12 * sc, bot = r.Bottom - 12 * sc;
+            return Clamp((int)Math.Round((bot - y) / Math.Max(1f, bot - top) * 127));
+        }
+
+        void Send(string id, int value)
+        {
+            if (engine.GetValue(id) == value) return;
+            engine.SetFromUi(id, value);
+            Invalidate();
+        }
+
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            if (active != null)
+            {
+                var d = NanoKontrol2.Get(active);
+                if (d.Kind == ControlKind.Fader) Send(active, FaderValueAt(d, e.Y));
+                else if (d.Kind == ControlKind.Knob) Send(active, Clamp(dragStartValue + (int)Math.Round((dragStartY - e.Y) * 127.0 / Theme.S(160))));
+                return;
+            }
             string h = HitTest(e.Location);
             if (h != hover)
             {
                 hover = h;
-                Cursor = h != null ? Cursors.Hand : Cursors.Default;
+                var hd = NanoKontrol2.Get(h);
+                Cursor = hd == null ? Cursors.Default : hd.Kind == ControlKind.Button ? Cursors.Hand : Cursors.SizeNS;
                 Invalidate();
             }
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            base.OnMouseEnter(e);
+            Focus(); // pour recevoir la molette
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (e.Button != MouseButtons.Left || active == null) return;
+            var d = NanoKontrol2.Get(active);
+            if (d.Kind == ControlKind.Button) engine.SetFromUi(active, 0); // relâchement du bouton
+            active = null;
+            Capture = false;
+            Invalidate();
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            var d = NanoKontrol2.Get(HitTest(e.Location));
+            if (d == null || d.Kind == ControlKind.Button) return;
+            int step = (ModifierKeys & Keys.Shift) != 0 ? 1 : 4;
+            int cur = Math.Max(0, engine.GetValue(d.Id));
+            Send(d.Id, Clamp(cur + Math.Sign(e.Delta) * step));
         }
 
         protected override void OnMouseLeave(EventArgs e)
@@ -113,7 +168,21 @@ namespace ControlCenterK
         {
             base.OnMouseDown(e);
             string h = HitTest(e.Location);
-            if (h != null && ControlClicked != null) ControlClicked(h);
+            if (h == null) return;
+            if (e.Button == MouseButtons.Right)
+            {
+                if (ControlClicked != null) ControlClicked(h); // clic droit : éditer ce contrôle
+                return;
+            }
+            if (e.Button != MouseButtons.Left) return;
+            var d = NanoKontrol2.Get(h);
+            active = h;
+            Capture = true;
+            dragStartY = e.Y;
+            dragStartValue = Math.Max(0, engine.GetValue(h));
+            if (d.Kind == ControlKind.Button) engine.SetFromUi(h, 127);  // appui
+            else if (d.Kind == ControlKind.Fader) Send(h, FaderValueAt(d, e.Y));
+            Invalidate();
         }
 
         protected override void OnPaint(PaintEventArgs e)
