@@ -345,7 +345,7 @@ namespace ControlCenterK
                                                   Names.Display(cfg, new Target { Type = "device", Id = y.Id, Name = y.Name }),
                                                   StringComparison.CurrentCultureIgnoreCase));
             foreach (var d in visible) add(new Target { Type = "device", Id = d.Id, Name = d.Name }, glyph);
-            if (visible.Count == 0) into.Add(new ToolStripMenuItem("(tout est masqué — voir la page Audio)") { Enabled = false });
+            if (visible.Count == 0) into.Add(new ToolStripMenuItem("(tout est masqué — voir la page Périphériques audio)") { Enabled = false });
         }
 
         #endregion

@@ -21,7 +21,7 @@ namespace ControlCenterK
             cfg = engine.Cfg;
             BackColor = Theme.Bg;
 
-            title = Theme.Label("Audio", Theme.Semi(18f), Theme.Text, BackColor);
+            title = Theme.Label("Périphériques audio", Theme.Semi(18f), Theme.Text, BackColor);
             sub = Theme.Label("Tout est détecté automatiquement. Masquez ce que vous ne voulez pas voir dans les menus, ou donnez un nom plus court.",
                 Theme.Ui(9.5f), Theme.Muted, BackColor);
             btnRefresh = new FlatButton("Actualiser") { Glyph = Glyphs.Refresh };

@@ -21,7 +21,7 @@ Résultat :
 
 - Fermer la fenêtre ne quitte pas l'app : elle reste dans la zone de notification (clic = ouvrir, clic droit = Quitter).
 - **Contrôleur** : cliquez sur un contrôle du dessin, ou touchez-le sur le nanoKONTROL2, puis ajoutez des cibles.
-- **Audio** : masquez les périphériques/applications inutiles et donnez-leur un nom court.
+- **Périphériques audio** : masquez les périphériques/applications inutiles et donnez-leur un nom court.
 - **Paramètres** : démarrage avec Windows, retour LED, courbe de volume…
 - **Profils** (barre latérale, bouton `⋯`) : nouveau, dupliquer, renommer, supprimer, **exporter / importer** en fichier `.json`.
   On peut aussi changer de profil depuis l'icône de notification, ou avec un bouton du contrôleur (actions « Profil suivant / précédent »).

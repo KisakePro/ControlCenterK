@@ -49,7 +49,7 @@ namespace ControlCenterK
 
             navCtl = new NavButton(Glyphs.Mixer, "Contrôleur");
             navRoute = new NavButton(Glyphs.Route, "Routage");
-            navAudio = new NavButton(Glyphs.Speaker, "Audio");
+            navAudio = new NavButton(Glyphs.Speaker, "Périphériques audio");
             navSettings = new NavButton(Glyphs.Settings, "Paramètres");
             foreach (var n in new[] { navCtl, navRoute, navAudio, navSettings }) side.Controls.Add(n);
             navCtl.Click += (s, e) => ShowPage("ctl");
