@@ -75,7 +75,13 @@ namespace ControlCenterK
             while (ZoneColors.Count < 6) ZoneColors.Add(zc[ZoneColors.Count]);
             while (ZoneNames.Count < 6) ZoneNames.Add("Zone " + (ZoneNames.Count + 1));
             if (CurrentStage < 1 || CurrentStage >= CorsairMouse.StageCount) CurrentStage = 1;
-            foreach (var k in new List<string>(Buttons.Keys)) if (Buttons[k] == null) Buttons.Remove(k);
+            foreach (var k in new List<string>(Buttons.Keys))
+            {
+                var a = Buttons[k];
+                // les boutons standard (bits 0 à 5) ne sont plus envoyés en mode avancé : anciennes détections retirées
+                int bit;
+                if (a == null || (k.StartsWith("cor:") && int.TryParse(k.Substring(4), out bit) && bit < 6 && string.IsNullOrEmpty(a.Kind))) Buttons.Remove(k);
+            }
         }
     }
 

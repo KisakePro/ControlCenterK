@@ -11,7 +11,7 @@ namespace ControlCenterK
         readonly AppConfig cfg;
         readonly Panel scroll;
         readonly List<Card> cards = new List<Card>();
-        Label lastButton;
+        Label lastButton, titleLabel, subLabel;
         readonly Dictionary<string, Card> buttonRows = new Dictionary<string, Card>();
 
         MouseConfig M { get { return cfg.Mouse; } }
@@ -41,15 +41,17 @@ namespace ControlCenterK
 
         public void Rebuild()
         {
+            int keep = -scroll.AutoScrollPosition.Y;
+            scroll.AutoScrollPosition = Point.Empty; // positions absolues calculées depuis le haut
             scroll.SuspendLayout();
             foreach (var c in cards) { scroll.Controls.Remove(c); c.Dispose(); }
             cards.Clear();
             buttonRows.Clear();
             foreach (Control c in new List<Control>(scroll.Controls.Count > 0 ? ToList(scroll.Controls) : new List<Control>())) { scroll.Controls.Remove(c); c.Dispose(); }
 
-            var title = Theme.Label("Souris", Theme.Semi(18f), Theme.Text, Theme.Bg);
+            var title = titleLabel = Theme.Label("Souris", Theme.Semi(18f), Theme.Text, Theme.Bg);
             title.Location = new Point(Theme.S(26), Theme.S(20));
-            var sub = Theme.Label("Réglages de votre souris Corsair et réaffectation des boutons (touches, raccourcis, macros).", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
+            var sub = subLabel = Theme.Label("Réglages de votre souris Corsair et réaffectation des boutons (touches, raccourcis, macros).", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
             sub.Location = new Point(Theme.S(28), Theme.S(58));
             scroll.Controls.Add(title);
             scroll.Controls.Add(sub);
@@ -66,6 +68,7 @@ namespace ControlCenterK
             foreach (var c in cards) scroll.Controls.Add(c);
             LayoutCards();
             scroll.ResumeLayout();
+            scroll.AutoScrollPosition = new Point(0, keep);
         }
 
         static List<Control> ToList(Control.ControlCollection cc)
@@ -78,6 +81,8 @@ namespace ControlCenterK
         void LayoutCards()
         {
             int pad = Theme.S(28), y = Theme.S(92) + scroll.AutoScrollPosition.Y;
+            if (titleLabel != null) titleLabel.Top = Theme.S(20) + scroll.AutoScrollPosition.Y;
+            if (subLabel != null) subLabel.Top = Theme.S(58) + scroll.AutoScrollPosition.Y;
             int w = Math.Max(Theme.S(560), Math.Min(Theme.S(980), scroll.ClientSize.Width - 2 * pad));
             foreach (var c in cards)
             {
@@ -386,6 +391,16 @@ namespace ControlCenterK
                 MouseModule.UpdateHook();
             };
             hint();
+            if (id.StartsWith("cor:"))
+            {
+                var del = new FlatButton("Retirer") { Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                del.FitWidth();
+                del.Location = new Point(row.Width - del.Width - Theme.S(8), Theme.S(6));
+                del.Click += (s, e) => { lock (AppConfig.Sync) M.Buttons.Remove(id); cfg.Save(); Rebuild(); };
+                row.Controls.Add(del);
+                valHolder.Width -= del.Width + Theme.S(8);
+                val.Width = valHolder.Width - Theme.S(16);
+            }
             row.Controls.AddRange(new Control[] { nameHolder, kind, valHolder });
             c.Controls.Add(row);
             buttonRows[id] = row;

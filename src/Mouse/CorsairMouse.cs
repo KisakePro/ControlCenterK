@@ -160,7 +160,7 @@ namespace ControlCenterK
 
         /// <summary>
         /// Mode logiciel : nécessaire pour l'éclairage et pour recevoir les boutons DPI / sniper / latéraux.
-        /// Les 6 premiers boutons restent des boutons Windows normaux (clics, molette, précédent / suivant).
+        /// Les 6 premiers boutons restent des boutons Windows normaux (clics, molette, précédent / suivant) et ne sont pas envoyés à l'application.
         /// </summary>
         public bool SetSoftwareMode(bool on)
         {
@@ -169,7 +169,7 @@ namespace ControlCenterK
             Thread.Sleep(20);
             var ki = new byte[44];
             ki[0] = 0x07; ki[1] = 0x40; ki[2] = 20;
-            for (int i = 0; i < 20; i++) { ki[4 + i * 2] = (byte)(i + 1); ki[5 + i * 2] = (byte)(i < 6 ? 0xC0 : 0x40); }
+            for (int i = 0; i < 20; i++) { ki[4 + i * 2] = (byte)(i + 1); ki[5 + i * 2] = (byte)(i < 6 ? 0x80 : 0x40); } // 1-6 : Windows uniquement, 7-20 : application
             return Send(ki);
         }
 
