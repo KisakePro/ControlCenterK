@@ -1,0 +1,19 @@
+// Numéro de version unique de l'application ET de l'installateur.
+// Pour publier une nouvelle version : modifier Current ici, compléter CHANGELOG.md,
+// puis créer le tag Git correspondant (ex. v1.1.0) : GitHub Actions construit et publie la Release.
+
+[assembly: System.Reflection.AssemblyVersion(MidiSoundController.AppVersion.Current + ".0")]
+[assembly: System.Reflection.AssemblyFileVersion(MidiSoundController.AppVersion.Current + ".0")]
+
+namespace MidiSoundController
+{
+    public static class AppVersion
+    {
+        public const string Current = "1.0.0";
+
+        /// <summary>Dépôt GitHub où sont publiées les versions (Releases).</summary>
+        public const string Repo = "kisakesan/ControlCenterK";
+
+        public const string RepoUrl = "https://github.com/" + Repo;
+    }
+}

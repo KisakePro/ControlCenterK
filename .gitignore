@@ -1,0 +1,12 @@
+# Sorties de compilation
+bin/
+dist/
+*.pdb
+*.tmp
+
+# Fichiers d'éditeurs / système
+.vs/
+.vscode/
+*.user
+Thumbs.db
+desktop.ini
