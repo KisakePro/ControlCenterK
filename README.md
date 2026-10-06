@@ -83,7 +83,7 @@ src/UI/*                interface sombre
 ## Mises à jour
 
 L'application vérifie (au plus une fois par jour, 30 s après le démarrage) s'il existe une nouvelle version dans les
-[Releases GitHub](https://github.com/kisakesan/ControlCenterK/releases). Si c'est le cas, une notification s'affiche et
+[Releases GitHub](https://github.com/KisakePro/ControlCenterK/releases). Si c'est le cas, une notification s'affiche et
 *Paramètres → Mises à jour → Installer* télécharge l'installateur, vérifie son empreinte SHA-256, puis le lance.
 La vérification automatique peut être désactivée dans les Paramètres.
 

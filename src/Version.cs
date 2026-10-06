@@ -12,7 +12,7 @@ namespace MidiSoundController
         public const string Current = "1.0.0";
 
         /// <summary>Dépôt GitHub où sont publiées les versions (Releases).</summary>
-        public const string Repo = "kisakesan/ControlCenterK";
+        public const string Repo = "KisakePro/ControlCenterK";
 
         public const string RepoUrl = "https://github.com/" + Repo;
     }
