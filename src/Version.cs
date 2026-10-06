@@ -9,7 +9,7 @@ namespace ControlCenterK
 {
     public static class AppVersion
     {
-        public const string Current = "1.0.0";
+        public const string Current = "1.1.0";
 
         /// <summary>Dépôt GitHub où sont publiées les versions (Releases).</summary>
         public const string Repo = "KisakePro/ControlCenterK";

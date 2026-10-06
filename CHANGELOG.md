@@ -2,6 +2,13 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [1.1.0] - 2026-10-06
+
+- Le nanoKONTROL2 affiché à l'écran est interactif : glisser un fader ou un potentiomètre, appuyer
+  sur un bouton (même effet que le contrôleur physique : volume, action, LED). Molette pour un réglage fin.
+- Le clic droit sur un contrôle l'ouvre dans l'éditeur (toucher le contrôle physique le sélectionne toujours).
+- L'onglet « Audio » s'appelle désormais « Périphériques audio ».
+
 ## [1.0.0] - 2026-10-06
 
 Première version publique.
