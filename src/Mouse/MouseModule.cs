@@ -267,11 +267,40 @@ namespace ControlCenterK
 
         #region Boutons
 
+        static volatile Action<string> detect;     // détection en cours : reçoit le prochain bouton pressé
+        static string detectedUp;                  // relâchement à absorber après une détection
+
+        /// <summary>Le prochain bouton pressé sur la souris est envoyé à "found" au lieu d'exécuter son action.</summary>
+        public static void BeginDetect(Action<string> found)
+        {
+            detect = found;
+            UpdateHook();
+        }
+
+        public static void CancelDetect()
+        {
+            detect = null;
+            UpdateHook();
+        }
+
+        /// <summary>Renvoie vrai si l'appui a été pris par la détection.</summary>
+        static bool TakeDetect(string id, bool down)
+        {
+            if (!down && detectedUp == id) { detectedUp = null; return true; }
+            var d = detect;
+            if (d == null || !down) return false;
+            detect = null;
+            detectedUp = id;
+            ThreadPool.QueueUserWorkItem(_ => d(id));
+            return true;
+        }
+
         static void OnCorsairButton(int bit, bool down)
         {
             string id = "cor:" + bit;
             var h = ButtonEvent;
             if (h != null) h(id, down);
+            if (TakeDetect(id, down)) return;
             MouseAction a;
             lock (AppConfig.Sync) M.Buttons.TryGetValue(id, out a);
             if (a != null) Execute(id, a, down);
@@ -334,6 +363,7 @@ namespace ControlCenterK
                 foreach (var kv in M.Buttons)
                     if (kv.Key.StartsWith("hid:") && !string.IsNullOrEmpty(kv.Value.Kind)) need = true;
             }
+            if (detect != null) need = true; // la détection doit aussi voir milieu / précédent / suivant
             if (need && Running && hook == IntPtr.Zero)
             {
                 hookProc = HookCallback;
@@ -362,8 +392,11 @@ namespace ControlCenterK
                     if (msg == 0x207 || msg == 0x208) { id = "hid:2"; down = msg == 0x207; }                          // milieu
                     else if (msg == 0x20B || msg == 0x20C) { id = (info.mouseData >> 16) == 1 ? "hid:3" : "hid:4"; down = msg == 0x20B; } // précédent / suivant
                 }
+                if (id != null && TakeDetect(id, down)) return new IntPtr(1); // pris par la détection : pas d'action d'origine
                 if (id != null)
                 {
+                    var bh = ButtonEvent;
+                    if (bh != null) bh(id, down);
                     MouseAction a;
                     lock (AppConfig.Sync) M.Buttons.TryGetValue(id, out a);
                     if (a != null && !string.IsNullOrEmpty(a.Kind))

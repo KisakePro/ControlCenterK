@@ -12,6 +12,9 @@ namespace ControlCenterK
         readonly Panel scroll;
         readonly List<Card> cards = new List<Card>();
         Label lastButton, titleLabel, subLabel;
+        FlatButton detectBtn;
+        bool detecting;
+        Timer detectTimeout;
         readonly Dictionary<string, Card> buttonRows = new Dictionary<string, Card>();
 
         MouseConfig M { get { return cfg.Mouse; } }
@@ -26,7 +29,8 @@ namespace ControlCenterK
             Controls.Add(scroll);
             MouseModule.Changed += OnChanged;
             MouseModule.ButtonEvent += OnButton;
-            Disposed += (s, e) => { MouseModule.Changed -= OnChanged; MouseModule.ButtonEvent -= OnButton; };
+            Disposed += (s, e) => { MouseModule.Changed -= OnChanged; MouseModule.ButtonEvent -= OnButton; if (detecting) MouseModule.CancelDetect(); };
+            VisibleChanged += (s, e) => { if (!Visible && detecting) StopDetect(null); };
             Rebuild();
         }
 
@@ -292,13 +296,18 @@ namespace ControlCenterK
         {
             var c = NewCard("Boutons",
                 "Milieu, précédent et suivant : réaffectés pour toutes les souris. " +
-                (dev != null && M.Advanced ? "Autres boutons : appuyez dessus, ils s'ajoutent automatiquement à la liste."
+                (dev != null && M.Advanced ? "Autres boutons (DPI, sniper, latéraux) : utilisez « Détecter un bouton »."
                                            : "Pour les boutons DPI, sniper et latéraux supplémentaires : activez le mode avancé.") +
                 "\nMacro : étapes séparées par des virgules — ex. « Ctrl+C, 50ms, Ctrl+V » ou « \"bonjour\", Entrée » ; « x3 » répète une étape.");
-            lastButton = Theme.Label(dev != null && M.Advanced ? "Dernier bouton détecté : —" : "", Theme.Ui(8.5f), Theme.Accent, Theme.Card);
-            lastButton.Location = new Point(Theme.S(20), NextY(c));
+            detectBtn = new FlatButton("Détecter un bouton", true) { Glyph = Glyphs.Mouse };
+            detectBtn.FitWidth();
+            detectBtn.Location = new Point(Theme.S(20), NextY(c));
+            detectBtn.Click += (s, e) => { if (detecting) StopDetect(null); else StartDetect(); };
+            lastButton = Theme.Label("Cliquez puis appuyez sur le bouton de la souris à configurer.", Theme.Ui(9f), Theme.Muted, Theme.Card);
+            lastButton.Location = new Point(detectBtn.Right + Theme.S(12), detectBtn.Top + (detectBtn.Height - lastButton.Height) / 2);
+            c.Controls.Add(detectBtn);
             c.Controls.Add(lastButton);
-            SetNextY(c, lastButton.Bottom + Theme.S(10));
+            SetNextY(c, detectBtn.Bottom + Theme.S(12));
 
             var ids = new List<string> { "hid:2", "hid:3", "hid:4" };
             lock (AppConfig.Sync) foreach (var k in M.Buttons.Keys) if (k.StartsWith("cor:")) ids.Add(k);
@@ -416,26 +425,84 @@ namespace ControlCenterK
         void OnButton(string id, bool down)
         {
             if (!down) return;
-            Ui(() =>
+            Ui(() => Highlight(id, false));
+        }
+
+        /// <summary>Met une ligne en évidence (et la fait défiler à l'écran si demandé).</summary>
+        void Highlight(string id, bool show)
+        {
+            Card row;
+            if (!buttonRows.TryGetValue(id, out row) || row.IsDisposed) return;
+            if (show) scroll.ScrollControlIntoView(row);
+            row.BackColor = Theme.Mix(Theme.Surface, Theme.Accent, 0.35f);
+            row.Invalidate(true);
+            var t = new Timer { Interval = show ? 1200 : 300 };
+            t.Tick += (s, e) => { t.Stop(); t.Dispose(); if (!row.IsDisposed) { row.BackColor = Theme.Surface; row.Invalidate(true); } };
+            t.Start();
+        }
+
+        void StartDetect()
+        {
+            detecting = true;
+            detectBtn.Text = "Appuyez sur un bouton de la souris…  (Annuler)";
+            detectBtn.FitWidth();
+            lastButton.Visible = false;
+            KeyDownCancel(true);
+            MouseModule.BeginDetect(id => Ui(() => StopDetect(id)));
+            detectTimeout = new Timer { Interval = 15000 };
+            detectTimeout.Tick += (s, e) => StopDetect(null);
+            detectTimeout.Start();
+        }
+
+        void StopDetect(string id)
+        {
+            if (!detecting) return;
+            detecting = false;
+            MouseModule.CancelDetect();
+            KeyDownCancel(false);
+            if (detectTimeout != null) { detectTimeout.Stop(); detectTimeout.Dispose(); detectTimeout = null; }
+            if (id == null)
             {
-                if (lastButton != null) lastButton.Text = "Dernier bouton détecté : " + (buttonRows.ContainsKey(id) ? DefaultName(id) : DefaultName(id) + " (ajouté)");
-                if (!buttonRows.ContainsKey(id) && id.StartsWith("cor:"))
-                {
-                    lock (AppConfig.Sync) if (!M.Buttons.ContainsKey(id)) M.Buttons[id] = new MouseAction { Name = DefaultName(id) };
-                    cfg.Save();
-                    Rebuild();
-                    return;
-                }
-                Card row;
-                if (buttonRows.TryGetValue(id, out row))
-                {
-                    row.BackColor = Theme.Mix(Theme.Surface, Theme.Accent, 0.35f);
-                    row.Invalidate(true);
-                    var t = new Timer { Interval = 300 };
-                    t.Tick += (s, e) => { t.Stop(); t.Dispose(); if (!row.IsDisposed) { row.BackColor = Theme.Surface; row.Invalidate(true); } };
-                    t.Start();
-                }
-            });
+                detectBtn.Text = "Détecter un bouton";
+                detectBtn.FitWidth();
+                lastButton.Text = MouseModule.Device != null && !M.Advanced
+                    ? "Aucun bouton détecté. Les boutons DPI, sniper et latéraux nécessitent le mode avancé."
+                    : "Aucun bouton détecté.";
+                lastButton.Left = detectBtn.Right + Theme.S(12);
+                lastButton.Visible = true;
+                return;
+            }
+            bool isNew = false;
+            lock (AppConfig.Sync)
+                if (id.StartsWith("cor:") && !M.Buttons.ContainsKey(id)) { M.Buttons[id] = new MouseAction { Name = DefaultName(id) }; isNew = true; }
+            if (isNew) { cfg.Save(); Rebuild(); }
+            else
+            {
+                detectBtn.Text = "Détecter un bouton";
+                detectBtn.FitWidth();
+            }
+            string name;
+            MouseAction a;
+            lock (AppConfig.Sync) name = M.Buttons.TryGetValue(id, out a) && !string.IsNullOrEmpty(a.Name) ? a.Name : DefaultName(id);
+            lastButton.Text = "✓ " + name + (isNew ? " ajouté à la liste" : " : déjà dans la liste");
+            lastButton.ForeColor = Theme.Green;
+            lastButton.Left = detectBtn.Right + Theme.S(12);
+            lastButton.Visible = true;
+            Highlight(id, true);
+        }
+
+        // Échap annule la détection
+        void KeyDownCancel(bool on)
+        {
+            var f = FindForm();
+            if (f == null) return;
+            f.KeyDown -= OnFormKey;
+            if (on) { f.KeyPreview = true; f.KeyDown += OnFormKey; }
+        }
+
+        void OnFormKey(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape && detecting) { e.Handled = true; StopDetect(null); }
         }
 
         Card WindowsCard()
