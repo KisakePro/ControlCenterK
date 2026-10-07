@@ -107,26 +107,13 @@ namespace ControlCenterK
                 if (!h.IsMouse || list.Exists(m => m.Key == h.Key)) continue;
                 var group = all.FindAll(x => x.Key == h.Key);
                 string product = NameOf(group, "");
-                if (IsKeyboard(group, product)) continue;
+                if (KeyboardDetect.IsKeyboard(group, product)) continue;
                 string brand = BrandName(h.Vid);
                 if (brand == "") foreach (var x in group) if (x.Manufacturer.Length > 0) { brand = x.Manufacturer; break; }
                 string name = product.Length > 0 ? CleanName(product, brand) : (brand + " Souris " + h.Key.ToUpperInvariant()).Trim();
                 list.Add(new DetectedMouse { Key = h.Key, Name = name, Brand = brand });
             }
             return list;
-        }
-
-        /// <summary>
-        /// Les claviers de jeu exposent souvent une collection « souris » (macros) : un appareil qui a aussi
-        /// une collection clavier n'est gardé que s'il se présente comme une souris ou un récepteur sans fil.
-        /// </summary>
-        static bool IsKeyboard(List<HidInfo> group, string product)
-        {
-            if (!group.Exists(x => x.UsagePage == 1 && x.Usage == 6)) return false;
-            string p = product.ToLowerInvariant();
-            foreach (var w in new[] { "mouse", "souris", "receiver", "récepteur", "dongle", "lightspeed", "unifying", "hyperspeed", "slipstream" })
-                if (p.Contains(w)) return false;
-            return true;
         }
 
         /// <summary>Essaie les pilotes sur les souris branchées ; "preferred" (vid:pid) est essayée en premier.</summary>
@@ -171,7 +158,7 @@ namespace ControlCenterK
         public static string CleanName(string product, string brand)
         {
             string s = product.Trim();
-            foreach (var junk in new[] { " Gaming Mouse", " Mouse", " Souris" })
+            foreach (var junk in new[] { " Mechanical Gaming Keyboard", " Gaming Keyboard", " Keyboard", " Gaming Mouse", " Mouse", " Souris" })
                 if (s.EndsWith(junk, StringComparison.OrdinalIgnoreCase)) s = s.Substring(0, s.Length - junk.Length).Trim();
             if (s.StartsWith(brand, StringComparison.OrdinalIgnoreCase)) s = s.Substring(brand.Length).Trim();
             // mots tout en majuscules : casse normale, sauf sigles courts (RGB, HERO…)

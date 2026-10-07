@@ -123,12 +123,10 @@ namespace ControlCenterK
 
         const byte VarStore = 0x01;
 
-        readonly SafeFileHandle h;
-        readonly object io = new object();
-        byte tid;
+        readonly RazerLink link;
         readonly List<byte> leds = new List<byte>();
 
-        RazerMouse(SafeFileHandle h) { this.h = h; }
+        RazerMouse(RazerLink link) { this.link = link; }
 
         public static RazerMouse Probe(List<HidInfo> group)
         {
@@ -136,66 +134,33 @@ namespace ControlCenterK
             RazerModel model;
             Models.TryGetValue(pid, out model);
             int iface = model != null ? model.Interface : 0;
-            var candidates = group.FindAll(x => x.FeatureLen == 91 && (x.Interface == iface || x.Interface < 0));
-            foreach (var info in candidates)
+            foreach (var info in group.FindAll(x => x.FeatureLen == 91 && (x.Interface == iface || x.Interface < 0)))
             {
-                var hd = Hid.Open(info.Path, true);
-                if (hd.IsInvalid) { hd.Dispose(); hd = Hid.OpenNoAccess(info.Path); }
-                if (hd.IsInvalid) { hd.Dispose(); continue; }
-                var dev = new RazerMouse(hd);
-                // identifiant de transaction : 0x1F (récentes), 0x3F, 0xFF (anciennes)
-                foreach (byte t in new byte[] { 0x1F, 0x3F, 0xFF })
-                {
-                    dev.tid = t;
-                    if (dev.ReadDpi() <= 0) continue;
-                    dev.Brand = "Razer";
-                    dev.Name = MouseDetect.CleanName(MouseDetect.NameOf(group, "Souris Razer"), "Razer");
-                    dev.MaxDpi = model != null ? model.MaxDpi : 16000;
-                    dev.PollRates = model == null || model.Poll ? new[] { 125, 500, 1000 } : new int[0];
-                    var z = model != null ? model.Zones : Z.None;
-                    var names = new List<string>();
-                    if ((z & Z.Logo) != 0) { dev.leds.Add(0x04); names.Add("Logo"); }
-                    if ((z & Z.Scroll) != 0) { dev.leds.Add(0x01); names.Add("Molette"); }
-                    if ((z & Z.All) != 0) { dev.leds.Add(0x00); names.Add("Éclairage"); }
-                    dev.Zones = names.ToArray();
-                    return dev;
-                }
-                hd.Dispose();
+                var link = RazerLink.Open(info, l => ReadDpi(l) > 0);
+                if (link == null) continue;
+                var dev = new RazerMouse(link);
+                dev.Brand = "Razer";
+                dev.Name = MouseDetect.CleanName(MouseDetect.NameOf(group, "Souris Razer"), "Razer");
+                dev.MaxDpi = model != null ? model.MaxDpi : 16000;
+                dev.PollRates = model == null || model.Poll ? new[] { 125, 500, 1000 } : new int[0];
+                var z = model != null ? model.Zones : Z.None;
+                var names = new List<string>();
+                if ((z & Z.Logo) != 0) { dev.leds.Add(0x04); names.Add("Logo"); }
+                if ((z & Z.Scroll) != 0) { dev.leds.Add(0x01); names.Add("Molette"); }
+                if ((z & Z.All) != 0) { dev.leds.Add(0x00); names.Add("Éclairage"); }
+                dev.Zones = names.ToArray();
+                return dev;
             }
             return null;
         }
 
-        /// <summary>Envoie une commande et attend la réponse de la souris ; renvoie les arguments de la réponse (null si échec).</summary>
-        byte[] Send(byte cls, byte id, byte size, params byte[] args)
+        static int ReadDpi(RazerLink l)
         {
-            var r = new byte[91];       // octet 0 : identifiant de rapport (0)
-            r[2] = tid;
-            r[6] = size;
-            r[7] = cls;
-            r[8] = id;
-            Array.Copy(args, 0, r, 9, Math.Min(args.Length, 80));
-            byte crc = 0;
-            for (int i = 3; i < 89; i++) crc ^= r[i];   // octets 2 à 87 du rapport
-            r[89] = crc;
-            lock (io)
-            {
-                if (!Hid.HidD_SetFeature(h, r, r.Length)) return null;
-                int end = Environment.TickCount + 450;
-                while (Environment.TickCount < end)
-                {
-                    Thread.Sleep(2);
-                    var resp = new byte[91];
-                    if (!Hid.HidD_GetFeature(h, resp, resp.Length)) return null;
-                    byte status = resp[1];
-                    if (status == 0x01 || status == 0x00) continue;               // occupée / pas encore traitée
-                    if (status != 0x02 || resp[7] != cls || resp[8] != id) return null; // échec, délai, non pris en charge
-                    var a = new byte[80];
-                    Array.Copy(resp, 9, a, 0, 80);
-                    return a;
-                }
-                return null;
-            }
+            var a = l.Send(0x04, 0x85, 0x07, 0x00);
+            return a == null ? -1 : a[1] << 8 | a[2];
         }
+
+        byte[] Send(byte cls, byte id, byte size, params byte[] args) { return link.Send(cls, id, size, args); }
 
         public override bool SetDpi(int dpi)
         {
@@ -203,11 +168,7 @@ namespace ControlCenterK
             return Send(0x04, 0x05, 0x07, VarStore, (byte)(dpi >> 8), (byte)dpi, (byte)(dpi >> 8), (byte)dpi, 0, 0) != null;
         }
 
-        public override int ReadDpi()
-        {
-            var a = Send(0x04, 0x85, 0x07, 0x00);
-            return a == null ? -1 : a[1] << 8 | a[2];
-        }
+        public override int ReadDpi() { return ReadDpi(link); }
 
         public override bool SetPollRate(int hz)
         {
@@ -220,17 +181,13 @@ namespace ControlCenterK
             bool ok = true;
             for (int i = 0; i < leds.Count && i < colors.Length; i++)
             {
-                var c = colors[i];
-                // effet statique « étendu » (souris récentes), sinon commande LED standard (anciennes)
-                if (Send(0x0F, 0x02, 0x09, VarStore, leds[i], 0x01, 0, 0, 0x01, c.R, c.G, c.B) != null) continue;
-                ok &= Send(0x03, 0x01, 0x05, VarStore, leds[i], c.R, c.G, c.B) != null
-                   && Send(0x03, 0x02, 0x03, VarStore, leds[i], 0x00) != null;
+                ok &= link.StaticColor(leds[i], colors[i]);
             }
             return ok;
         }
 
         public override bool Alive() { return ReadDpi() > 0; }
 
-        public override void Dispose() { h.Dispose(); }
+        public override void Dispose() { link.Dispose(); }
     }
 }

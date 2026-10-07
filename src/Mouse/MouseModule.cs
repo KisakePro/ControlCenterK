@@ -24,7 +24,6 @@ namespace ControlCenterK
         static int sniperReturn = -1;
         static volatile bool scanning;
         static bool probed;                  // les souris de "detected" ont déjà été essayées
-        static readonly HashSet<string> held = new HashSet<string>();
 
         public static bool Running { get; private set; }
         /// <summary>Souris réglable pilotée en ce moment (null si aucune).</summary>
@@ -371,20 +370,6 @@ namespace ControlCenterK
             string kind = a.Kind ?? "", val = a.Value ?? "";
             switch (kind)
             {
-                case "keys":
-                    {
-                        var keys = InputSim.ParseCombo(val);
-                        if (keys == null) return;
-                        // maintenu tant que le bouton est maintenu (utile en jeu, push-to-talk…)
-                        lock (held)
-                        {
-                            if (down && held.Add(id)) foreach (var k in keys) InputSim.Key(k, true);
-                            else if (!down && held.Remove(id)) for (int i = keys.Count - 1; i >= 0; i--) InputSim.Key(keys[i], false);
-                        }
-                        break;
-                    }
-                case "macro": if (down) InputSim.RunMacro(val); break;
-                case "click": { int b; if (int.TryParse(val, out b)) InputSim.MouseButton(b, down); break; }
                 case "dpi_next": if (down) CycleStage(1); break;
                 case "dpi_prev": if (down) CycleStage(-1); break;
                 case "dpi_stage": { int s; if (down && int.TryParse(val, out s) && s >= 0 && s < CorsairMouse.StageCount) { SetStage(s); cfg.Save(); } break; }
@@ -392,12 +377,7 @@ namespace ControlCenterK
                     if (down) { var c = dc; if (c == null) break; lock (AppConfig.Sync) sniperReturn = c.CurrentStage; SetStage(0); }
                     else if (sniperReturn >= 0) { SetStage(sniperReturn); sniperReturn = -1; }
                     break;
-                case "media_play": if (down) Native.PressKey(0xB3); break;
-                case "media_next": if (down) Native.PressKey(0xB0); break;
-                case "media_prev": if (down) Native.PressKey(0xB1); break;
-                case "media_mute": if (down) Native.PressKey(0xAD); break;
-                case "vol_up": if (down) Native.PressKey(0xAF); break;
-                case "vol_down": if (down) Native.PressKey(0xAE); break;
+                default: InputActions.Run(id, a, down); break;
             }
         }
 

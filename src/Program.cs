@@ -75,9 +75,12 @@ namespace ControlCenterK
                 Router = null;
                 VirtualHost.Stop();
             }
-            // Souris : réglages Corsair et réaffectation des boutons
+            // Souris : réglages des souris et réaffectation des boutons
             if (Cfg.ModMouse && !MouseModule.Running) MouseModule.Start(Cfg);
             else if (!Cfg.ModMouse && MouseModule.Running) MouseModule.Stop();
+            // Clavier : éclairage et macros
+            if (Cfg.ModKeyboard && !KeyboardModule.Running) KeyboardModule.Start(Cfg);
+            else if (!Cfg.ModKeyboard && KeyboardModule.Running) KeyboardModule.Stop();
 
             var h = ModulesChanged;
             if (h != null) h();
@@ -86,6 +89,7 @@ namespace ControlCenterK
         public static void Shutdown()
         {
             if (MouseModule.Running) MouseModule.Stop(); // remet la souris en mode matériel
+            if (KeyboardModule.Running) KeyboardModule.Stop(); // rend l'éclairage au clavier
             if (Router != null) { Engine.Router = null; Router.Dispose(); Router = null; }
             VirtualHost.Stop();
         }
@@ -131,6 +135,7 @@ namespace ControlCenterK
             host = new HostWindow();
             host.DeviceChanged += engine.OnDeviceChange;
             host.DeviceChanged += MouseModule.OnDeviceChange;
+            host.DeviceChanged += KeyboardModule.OnDeviceChange;
             showWait = ThreadPool.RegisterWaitForSingleObject(show, (s, t) => host.BeginInvoke(new Action(ShowMain)), null, -1, false);
             quitWait = ThreadPool.RegisterWaitForSingleObject(quitEvent, (s, t) => host.BeginInvoke(new Action(Quit)), null, -1, true);
 

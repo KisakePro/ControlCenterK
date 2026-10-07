@@ -204,4 +204,41 @@ namespace ControlCenterK
 
         #endregion
     }
+
+    /// <summary>Actions communes aux boutons de souris et aux touches : raccourci maintenu, macro, clic, média, volume.</summary>
+    static class InputActions
+    {
+        static readonly HashSet<string> held = new HashSet<string>();
+
+        /// <summary>Exécute l'action (appui / relâchement) ; faux si le type d'action n'est pas une action commune.</summary>
+        public static bool Run(string id, MouseAction a, bool down)
+        {
+            string val = a.Value ?? "";
+            switch (a.Kind ?? "")
+            {
+                case "keys":
+                    {
+                        var keys = InputSim.ParseCombo(val);
+                        if (keys == null) return true;
+                        // maintenu tant que le bouton est maintenu (utile en jeu, push-to-talk…)
+                        lock (held)
+                        {
+                            if (down && held.Add(id)) foreach (var k in keys) InputSim.Key(k, true);
+                            else if (!down && held.Remove(id)) for (int i = keys.Count - 1; i >= 0; i--) InputSim.Key(keys[i], false);
+                        }
+                        return true;
+                    }
+                case "macro": if (down) InputSim.RunMacro(val); return true;
+                case "click": { int b; if (int.TryParse(val, out b)) InputSim.MouseButton(b, down); return true; }
+                case "media_play": if (down) Native.PressKey(0xB3); return true;
+                case "media_next": if (down) Native.PressKey(0xB0); return true;
+                case "media_prev": if (down) Native.PressKey(0xB1); return true;
+                case "media_mute": if (down) Native.PressKey(0xAD); return true;
+                case "vol_up": if (down) Native.PressKey(0xAF); return true;
+                case "vol_down": if (down) Native.PressKey(0xAE); return true;
+                case "none": return true; // touche désactivée
+            }
+            return false;
+        }
+    }
 }

@@ -197,7 +197,7 @@ namespace ControlCenterK
                 case "route": page = pRoute ?? (pRoute = Add(new RouterPage(engine))); break;
                 case "audio": page = pAudio ?? (pAudio = Add(new AudioPage(engine))); break;
                 case "mouse": page = pMouse ?? (pMouse = Add(new MousePage(engine.Cfg))); break;
-                case "keyboard": page = pKeyboard ?? (pKeyboard = Add(new KeyboardPage())); break;
+                case "keyboard": page = pKeyboard ?? (pKeyboard = Add(new KeyboardPage(engine.Cfg))); break;
                 default: key = "settings"; page = pSettings ?? (pSettings = Add(new SettingsPage(engine))); break;
             }
             current = key;

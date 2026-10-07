@@ -182,6 +182,7 @@ namespace ControlCenterK
         public bool ModMouse { get; set; }                       // module "Souris"
         public bool ModKeyboard { get; set; }                    // module "Clavier"
         public MouseConfig Mouse { get; set; }
+        public KeyboardConfig Keyboard { get; set; }
         public RouterConfig Router { get; set; }
         public int Jitter { get; set; }                          // seuil anti-tremblement (0 = désactivé)
         public Dictionary<string, int> ControlValues { get; set; } // dernière position connue des faders / potentiomètres
@@ -196,6 +197,7 @@ namespace ControlCenterK
             Jitter = 3;
             ControlValues = new Dictionary<string, int>();
             Mouse = new MouseConfig();
+            Keyboard = new KeyboardConfig();
             ModMidi = true;
             ModKeyboard = true;
             AutoUpdate = true;
@@ -255,6 +257,8 @@ namespace ControlCenterK
             if (ControlValues == null) ControlValues = new Dictionary<string, int>();
             if (Mouse == null) Mouse = new MouseConfig();
             Mouse.Fix();
+            if (Keyboard == null) Keyboard = new KeyboardConfig();
+            Keyboard.Fix();
             if (Router == null) Router = new RouterConfig();
             Router.Fix();
             if (Theme == null) Theme = new ThemeDef { Name = "Bleu nuit", Accent = "#4C8DFF", Base = "#AAB4E1", Intensity = 1 };

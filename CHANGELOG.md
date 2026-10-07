@@ -11,7 +11,9 @@ Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
   pour les souris Corsair, Logitech G (HID++), Razer et SteelSeries ; testé sur la Corsair Nightsword RGB,
   les autres modèles sont signalés « expérimental ». Réglages enregistrés séparément pour chaque modèle.
   Boutons réaffectables (touches, macros, DPI, média) avec un bouton « Détecter un bouton ».
-- Module « Clavier » (page en construction).
+- Module « Clavier » : détection automatique des claviers. Éclairage touche par touche sur les SteelSeries Apex
+  (testé sur l'Apex M750) et de tout le clavier sur les Corsair K65 / K70 / K95 / Strafe et Razer, avec animations
+  (respiration, arc-en-ciel, vague, réactif). Macros sur n'importe quelle touche, pour tous les claviers.
 - Prise en charge de plusieurs contrôleurs MIDI.
 - Paramètres regroupés par catégorie : Général, Apparence, Contrôleur MIDI, Dossier de configuration.
 - Les réglages sont enregistrés dans un dossier « config » à côté de ControlCenterK.exe
