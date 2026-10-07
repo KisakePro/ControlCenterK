@@ -2,9 +2,9 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
-## [0.3] - 2026-10-07
+## [0.5] - 2026-10-07
 
-- Nouvelle numérotation des versions : 0.3.
+- Nouvelle numérotation des versions : 0.5 (remplace la série 1.x).
 - Barre latérale en sections : profil actif sous le nom de l'application, section « Audio »
   (Contrôleur, Routage, Périphériques audio) et section « Périphériques » (Souris, Clavier).
 - Module « Souris » : détection automatique des souris branchées. Réglages (DPI, fréquence, éclairage)
