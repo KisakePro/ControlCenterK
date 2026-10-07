@@ -1,100 +1,111 @@
 # ControlCenterK
 
-Mixeur Windows piloté par un **Korg nanoKONTROL2** : chaque fader / knob règle le volume d'une ou plusieurs cibles
-(sorties, entrées, applications…), les boutons coupent le son, changent le périphérique par défaut ou envoient des touches multimédia.
+**Le centre de contrôle léger de votre bureau Windows : son, contrôleurs MIDI, souris et clavier, réunis dans une seule application sombre, rapide et sans compte.**
 
-## Compiler
+ControlCenterK remplace plusieurs logiciels lourds (mixeur MIDI, console de routage audio, logiciels de souris et de clavier des fabricants) par un seul petit exécutable. Il reste discret dans la zone de notification et ne consomme quasiment rien quand on ne s'en sert pas.
 
-Aucune installation : on utilise le compilateur C# fourni avec Windows (.NET Framework 4.8).
+[**⬇ Télécharger la dernière version**](https://github.com/KisakePro/ControlCenterK/releases/latest) · Windows 10 / 11 · installation sans droits administrateur
+
+![Contrôleur](docs/controleur.png)
+
+---
+
+## Ce qu'il sait faire
+
+### 🎚️ Contrôleur MIDI
+Pilotez le volume de Windows avec un contrôleur physique.
+- Chaque **fader** ou **potentiomètre** règle une ou plusieurs cibles : sortie ou micro par défaut, un périphérique précis, une application (Discord, Spotify, un jeu…), l'application au premier plan, les sons système…
+- Les **boutons** coupent le son, changent le périphérique par défaut, envoient des touches multimédia ou changent de profil.
+- **Contrôleur à l'écran interactif** : clic gauche pour bouger un fader ou appuyer sur un bouton, clic droit pour le configurer.
+- **Profils** que l'on crée, duplique, exporte et importe (fichier `.json`).
+- **Filtre anti-tremblement** : seul un mouvement franc compte, les micro-variations d'un fader au repos sont ignorées.
+- Retour **LED**, courbe de volume réglable, **MIDI learn** pour les contrôleurs reprogrammés.
+- Contrôleurs pris en charge : Korg nanoKONTROL2 et les contrôleurs MIDI les plus répandus (X-Touch Mini, APC mini…), plusieurs à la fois.
+
+### 🔀 Routage audio
+Une console façon Voicemeeter, intégrée.
+- Envoyez n'importe quelle entrée (micro, ou tout ce qui est joué sur une sortie) vers plusieurs sorties à la fois : casque **et** enceintes, par exemple.
+- Gain en dB, muet, vumètres, délai par sortie pour synchroniser les appareils.
+- Trois vues : **Console**, **Matrice** (un clic par liaison) et **Cartographie**.
+- **Périphériques audio virtuels** : l'application crée de vraies cartes son (« Haut-parleurs » / « Microphone ») visibles par tous vos logiciels, pour faire circuler le son entre eux.
+
+### 🖱️ Souris
+Branchez une souris : elle est **détectée automatiquement** et configurée.
+- **Sensibilité (DPI)** en étapes, mode sniper, **fréquence d'interrogation**.
+- **Éclairage** : couleurs par zone, respiration, arc-en-ciel.
+- **Boutons réaffectables** : raccourci clavier, macro, clic, média, volume, changement de DPI… « Détecter un bouton » : appuyez, il apparaît dans la liste.
+- Chaque modèle garde ses propres réglages.
+
+| Marque | DPI | Fréquence | Éclairage | Boutons supplémentaires |
+|---|:-:|:-:|:-:|:-:|
+| Corsair (Nightsword, M65, Scimitar, Ironclaw…) | ✔ | ✔ | ✔ | ✔ |
+| SteelSeries (≈ 70 modèles : Rival, Sensei, Aerox, Prime…) | ✔ | ✔ | selon le modèle | ✔ |
+| Razer (≈ 90 modèles : DeathAdder, Viper, Basilisk…) | ✔ | ✔ | logo / molette | — |
+| Logitech G (filaires et Lightspeed) | ✔ | ✔ | — | — |
+| Toutes les autres souris | boutons milieu / précédent / suivant / molette inclinée, réglages Windows |||
+
+![Souris](docs/souris.png)
+
+### ⌨️ Clavier
+- **Éclairage touche par touche** sur un clavier dessiné à l'écran, avec libellés AZERTY / QWERTY.
+- **Palette de couleurs** à glisser directement sur les touches.
+- **Effets** avec vos couleurs : dégradé, respiration, cycle de couleurs, vague, arc-en-ciel, réactif (les touches s'allument quand on tape).
+- **Macros sur n'importe quelle touche**, pour tous les claviers.
+
+| Marque | Éclairage |
+|---|---|
+| SteelSeries Apex (M750, 5, 7, 9, Pro) | touche par touche |
+| Corsair K65 / K70 / K95 / Strafe RGB | tout le clavier |
+| Razer | tout le clavier |
+| Tous les claviers | macros |
+
+![Clavier](docs/clavier.png)
+
+### 🎨 Et aussi
+- **Thème sombre** personnalisable : couleur d'accent, teinte du fond, thèmes enregistrés.
+- **Modules** activables séparément : un module désactivé ne charge rien du tout.
+- **Mises à jour** intégrées depuis GitHub (empreinte SHA-256 vérifiée).
+- Réglages dans un dossier `config` à côté de l'application (emplacement modifiable).
+
+---
+
+## Installation
+
+1. Téléchargez `ControlCenterK-Setup.exe` depuis la [dernière version](https://github.com/KisakePro/ControlCenterK/releases/latest).
+2. Lancez-le : installation pour votre utilisateur, sans droits administrateur, avec raccourcis et démarrage avec Windows en option.
+
+Fermer la fenêtre ne quitte pas l'application : elle reste dans la zone de notification (clic pour l'ouvrir, clic droit → Quitter).
+
+> **Bon à savoir**
+> - Fermez les logiciels des fabricants (iCUE, G HUB, Synapse, SteelSeries GG) : ils imposeraient leurs propres réglages.
+> - Les réglages de souris et de clavier sont envoyés **en direct** : rien n'est écrit dans la mémoire interne de vos périphériques, qui retrouvent leurs réglages d'usine au rebranchement.
+> - Les modèles non testés sont signalés « expérimental » dans l'application.
+> - Les périphériques audio virtuels utilisent le pilote libre [usbip-win2](https://github.com/vadimgrn/usbip-win2), à installer une fois.
+
+---
+
+## Pour les développeurs
+
+Aucun outil à installer : le projet se compile avec le compilateur C# fourni avec Windows (.NET Framework 4.8).
 
 ```bat
 build.cmd
 ```
 
-Résultat :
-- `bin\ControlCenterK.exe` : l'application (un seul fichier, utilisable sans installation) ;
-- `dist\ControlCenterK-Setup.exe` : l'installateur à distribuer. Il installe pour l'utilisateur courant, sans droits
-  administrateur, dans `%LOCALAPPDATA%\Programs\ControlCenterK` (raccourcis, démarrage avec Windows en option,
-  entrée dans « Applications installées »). Relancé sur une version existante, il fait la mise à jour en gardant les réglages.
-
-## Utilisation
-
-- Fermer la fenêtre ne quitte pas l'app : elle reste dans la zone de notification (clic = ouvrir, clic droit = Quitter).
-- **Contrôleur** : cliquez sur un contrôle du dessin, ou touchez-le sur le nanoKONTROL2, puis ajoutez des cibles.
-- **Périphériques audio** : masquez les périphériques/applications inutiles et donnez-leur un nom court.
-- **Paramètres** : démarrage avec Windows, retour LED, courbe de volume…
-- **Profils** (barre latérale, bouton `⋯`) : nouveau, dupliquer, renommer, supprimer, **exporter / importer** en fichier `.json`.
-  On peut aussi changer de profil depuis l'icône de notification, ou avec un bouton du contrôleur (actions « Profil suivant / précédent »).
-  À l'import sur un autre PC, les périphériques sont retrouvés par leur nom.
-- **Modules** (Paramètres) : « Contrôleur MIDI » et « Routage audio » s'activent séparément. Un module désactivé
-  ne charge ni sa page, ni ses threads, ni sa mémoire audio.
-- **Routage audio** (module) : console façon Voicemeeter. Une *entrée* est un micro / une entrée ligne, ou une sortie
-  capturée « en boucle » (tout ce qui y est joué). Chaque entrée peut être envoyée vers une ou plusieurs *sorties*
-  (casque, enceintes…) avec gain en dB, muet, vumètres, et un délai par sortie pour les synchroniser.
-  Glisser le fader, molette = ±1 dB (Maj = ±0,1), double-clic = 0 dB, clic droit = menu.
-  Les tranches peuvent aussi être pilotées par le nanoKONTROL2 (cibles « Routage audio »).
-  Deux vues : **Console** (rubrique « ENVOYER VERS » sur chaque entrée) et **Matrice de routage** (entrées en lignes,
-  sorties en colonnes, un clic par liaison).
-- **Vos périphériques virtuels** (bouton « Virtuels », section du haut) : l'app crée de vraies cartes son visibles par
-  tous les logiciels, « Haut-parleurs (Nom) » et « Microphone (Nom) ». Principe : l'app émule une carte son USB Audio 1.0
-  (48 kHz, stéréo 16 bits) et la présente à Windows via USB/IP en local (`127.0.0.1:3240`) ; Windows utilise alors son
-  propre pilote audio. Prérequis unique : le pilote [usbip-win2](https://github.com/vadimgrn/usbip-win2) (BSD-2, signé
-  Microsoft), à installer soi-même depuis sa page de versions. Les périphériques existent tant que l'app tourne.
-- **Entrées / sorties virtuelles d'autres logiciels** (même fenêtre) : détecte les câbles virtuels (paires
-  « X Input » ⇄ « X Output ») et les périphériques virtuels d'autres logiciels (Wave Link, Voicemeeter…), et crée en un clic
-  une *entrée virtuelle* (un logiciel joue sur le câble → le son arrive dans la console) ou une *sortie virtuelle*
-  (la console joue sur le câble → l'autre logiciel le reçoit comme un micro). Les boucles câble → même câble sont bloquées.
-  Windows n'autorise la création de nouveaux périphériques audio que par un pilote signé : pour avoir vos propres câbles,
-  installez [VB-CABLE](https://vb-audio.com/Cable/) (gratuit), ils apparaîtront automatiquement.
-- **Apparence** (Paramètres) : thèmes prédéfinis, couleur d'accent et teinte du fond à choisir dans une grille de nuances
-  (ou en couleur personnalisée), luminosité du fond, et « Enregistrer ce thème… » pour garder ses combinaisons.
-- **Filtre anti-tremblement** (Paramètres) : ignore les micro-variations d'un fader au repos ; seul un mouvement franc change le son ou sélectionne le contrôle.
-- **MIDI learn** : si votre nanoKONTROL2 n'est pas en mapping d'usine, sélectionnez un contrôle, cliquez « MIDI learn » et bougez le contrôle physique.
-
-### LED des boutons
-
-Pour que les LED suivent l'état muet, passez le nanoKONTROL2 en **LED Mode : External** avec *KORG Kontrol Editor*
-(sinon le contrôleur gère ses LED lui‑même).
-
-## Cibles disponibles
-
-| Cible | Effet |
-|---|---|
-| Sortie / micro par défaut | Le périphérique par défaut actuel de Windows |
-| Périphérique | Une sortie ou entrée précise (Elgato Wave Link, Voicemeeter, Realtek…) |
-| Application | Toutes les sessions audio de l'exécutable (ex. `brave`, `steam`) |
-| Application au premier plan | L'application de la fenêtre active |
-| Sons système | Les sons de Windows |
-| Applications non assignées | Toutes les applis qui ne sont assignées à aucun contrôle |
-
-## Structure
+- `bin\ControlCenterK.exe` : l'application (un seul fichier, utilisable sans installation)
+- `dist\ControlCenterK-Setup.exe` : l'installateur
 
 ```
-src/Program.cs          démarrage, instance unique, icône de notification
-src/Engine.cs           thread worker : MIDI -> volumes / actions / LED
-src/CoreAudio.cs        accès WASAPI (volumes, sessions, périphérique par défaut)
-src/Midi.cs             entrée / sortie MIDI (winmm)
-src/Config.cs           configuration (dossier config\ à côté du .exe, modifiable dans Paramètres)
-src/Router/*            module de routage : flux WASAPI, rééchantillonnage, mixage
-src/Controller.cs       disposition et CC d'usine du nanoKONTROL2
-src/UI/*                interface sombre
+src/Engine.cs, Midi.cs, CoreAudio.cs   contrôleurs MIDI et volumes Windows (WASAPI)
+src/Router/                            routage audio et périphériques virtuels
+src/Mouse/                             détection et pilotes des souris
+src/Keyboard/                          détection, pilotes et effets des claviers
+src/UI/                                interface
+setup/                                 installateur
 ```
 
-## Mises à jour
+**Publier une version** : modifier `src/Version.cs`, ajouter la section correspondante dans `CHANGELOG.md`, puis pousser un tag `vX.Y` : GitHub Actions compile et publie la release.
 
-L'application vérifie (au plus une fois par jour, 30 s après le démarrage) s'il existe une nouvelle version dans les
-[Releases GitHub](https://github.com/KisakePro/ControlCenterK/releases). Si c'est le cas, une notification s'affiche et
-*Paramètres → Mises à jour → Installer* télécharge l'installateur, vérifie son empreinte SHA-256, puis le lance.
-La vérification automatique peut être désactivée dans les Paramètres.
+## Remerciements
 
-## Publier une nouvelle version
-
-1. Modifier le numéro dans `src/Version.cs` (ex. `1.1.0`).
-2. Ajouter une section `## [1.1.0] - date` en haut de `CHANGELOG.md` : elle devient le texte de la Release.
-3. Committer, puis créer et pousser le tag :
-   ```
-   git tag v1.1.0
-   git push origin main --tags
-   ```
-4. GitHub Actions (`.github/workflows/release.yml`) compile l'application et l'installateur, et publie la Release avec
-   `ControlCenterK-Setup.exe` et son empreinte `.sha256`. Les utilisateurs sont alors prévenus automatiquement.
+Les protocoles des périphériques s'appuient sur la documentation de projets libres : [OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB), [openrazer](https://github.com/openrazer/openrazer), [rivalcfg](https://github.com/flozz/rivalcfg), [libratbag](https://github.com/libratbag/libratbag) et [ckb-next](https://github.com/ckb-next/ckb-next).
