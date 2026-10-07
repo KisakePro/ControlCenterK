@@ -180,6 +180,7 @@ namespace ControlCenterK
         public bool ModMidi { get; set; }                        // module "Contrôleur MIDI"
         public bool ModRouter { get; set; }                      // module "Routage audio"
         public bool ModMouse { get; set; }                       // module "Souris"
+        public bool ModKeyboard { get; set; }                    // module "Clavier"
         public MouseConfig Mouse { get; set; }
         public RouterConfig Router { get; set; }
         public int Jitter { get; set; }                          // seuil anti-tremblement (0 = désactivé)
@@ -196,6 +197,7 @@ namespace ControlCenterK
             ControlValues = new Dictionary<string, int>();
             Mouse = new MouseConfig();
             ModMidi = true;
+            ModKeyboard = true;
             AutoUpdate = true;
             Router = new RouterConfig();
             Theme = new ThemeDef { Name = "Bleu nuit", Accent = "#4C8DFF", Base = "#AAB4E1", Intensity = 1 };
@@ -345,12 +347,38 @@ namespace ControlCenterK
 
         #endregion
 
+        #region Dossier de configuration
+
+        /// <summary>Clé où est mémorisé un dossier de configuration choisi par l'utilisateur (lue aussi par l'installateur).</summary>
+        public const string FolderKey = @"Software\ControlCenterK", FolderValue = "ConfigFolder";
+
+        static string folder;
+
+        /// <summary>Dossier des réglages : celui choisi dans les paramètres, sinon "config" à côté du .exe.</summary>
         public static string Folder
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ControlCenterK"); }
+            get { return folder ?? (folder = ResolveFolder()); }
+        }
+
+        /// <summary>Dossier par défaut : "config" à côté de l'exécutable.</summary>
+        public static string DefaultFolder
+        {
+            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config"); }
+        }
+
+        /// <summary>Vrai si l'utilisateur a choisi un autre dossier que celui par défaut.</summary>
+        public static bool CustomFolder
+        {
+            get { return !string.IsNullOrEmpty(ReadFolderSetting()); }
         }
 
         static string FilePath { get { return Path.Combine(Folder, "config.json"); } }
+
+        /// <summary>Ancien emplacement des réglages (jusqu'à la version 1.1.0) : %APPDATA%\ControlCenterK.</summary>
+        public static string AppDataFolder
+        {
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ControlCenterK"); }
+        }
 
         /// <summary>Ancien dossier de réglages (avant le renommage en ControlCenterK).</summary>
         public static string LegacyFolder
@@ -358,22 +386,92 @@ namespace ControlCenterK
             get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MidiSoundController"); }
         }
 
-        /// <summary>Premier lancement sous le nouveau nom : reprend les réglages de l'ancien dossier (qui reste en sauvegarde).</summary>
-        static void MigrateLegacyFolder()
+        static string ReadFolderSetting()
         {
             try
             {
-                if (File.Exists(FilePath) || !Directory.Exists(LegacyFolder)) return;
-                Directory.CreateDirectory(Folder);
-                foreach (var f in Directory.GetFiles(LegacyFolder))
-                    File.Copy(f, Path.Combine(Folder, Path.GetFileName(f)), false);
+                using (var k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(FolderKey))
+                    return k == null ? null : k.GetValue(FolderValue) as string;
+            }
+            catch { return null; }
+        }
+
+        static bool Writable(string dir)
+        {
+            try
+            {
+                Directory.CreateDirectory(dir);
+                string probe = Path.Combine(dir, ".ecriture.tmp");
+                File.WriteAllText(probe, "");
+                File.Delete(probe);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        static string ResolveFolder()
+        {
+            string custom = ReadFolderSetting();
+            if (!string.IsNullOrEmpty(custom) && Writable(custom)) return custom;
+            // dossier de l'exe protégé en écriture (ex. Program Files) : on garde %APPDATA%
+            return Writable(DefaultFolder) ? DefaultFolder : AppDataFolder;
+        }
+
+        /// <summary>
+        /// Déplace les réglages vers "dir" (null = dossier par défaut à côté du .exe) et l'utilise désormais.
+        /// Le fichier de l'ancien dossier reste en place comme sauvegarde. Renvoie un message d'erreur ou null.
+        /// </summary>
+        public string ChangeFolder(string dir)
+        {
+            string target = string.IsNullOrEmpty(dir) ? DefaultFolder : Path.GetFullPath(dir);
+            if (string.Equals(target.TrimEnd('\\'), Folder.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return null;
+            if (!Writable(target)) return "Impossible d'écrire dans ce dossier :\n" + target;
+            lock (Sync)
+            {
+                string previous = folder;
+                folder = target;
+                if (!persistent) { folder = previous; return "Réglages non chargés."; }
+                Save();
+                if (!File.Exists(FilePath)) { folder = previous; return "L'enregistrement dans ce dossier a échoué."; }
+                try
+                {
+                    using (var k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(FolderKey))
+                    {
+                        if (string.Equals(target, DefaultFolder, StringComparison.OrdinalIgnoreCase)) k.DeleteValue(FolderValue, false);
+                        else k.SetValue(FolderValue, target);
+                    }
+                }
+                catch (Exception ex) { folder = previous; return "Impossible de mémoriser ce dossier : " + ex.Message; }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Premier lancement avec ce dossier : reprend les réglages de l'ancien emplacement (%APPDATA%),
+        /// qui reste en place comme sauvegarde.
+        /// </summary>
+        static void MigrateOldFolder()
+        {
+            try
+            {
+                if (File.Exists(FilePath)) return;
+                foreach (var old in new[] { AppDataFolder, LegacyFolder })
+                {
+                    string f = Path.Combine(old, "config.json");
+                    if (string.Equals(old, Folder, StringComparison.OrdinalIgnoreCase) || !File.Exists(f)) continue;
+                    Directory.CreateDirectory(Folder);
+                    File.Copy(f, FilePath, false);
+                    return;
+                }
             }
             catch { }
         }
 
+        #endregion
+
         public static AppConfig Load()
         {
-            MigrateLegacyFolder();
+            MigrateOldFolder();
             AppConfig c = null;
             try
             {
@@ -505,6 +603,6 @@ namespace ControlCenterK
         public const string Volume = "\uE767", Mic = "\uE720", Speaker = "\uE7F5", Headphone = "\uE7F6",
             App = "\uE7C4", Apps = "\uE71D", Focus = "\uE7F4", System = "\uE770", Settings = "\uE713",
             Mixer = "\uE9E9", Close = "\uE711", Add = "\uE710", Chevron = "\uE70D", Refresh = "\uE72C",
-            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
+            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
     }
 }

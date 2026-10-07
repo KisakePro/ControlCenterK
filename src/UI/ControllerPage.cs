@@ -32,7 +32,7 @@ namespace ControlCenterK
             DoubleBuffered = true;
 
             title = Theme.Label("Contrôleur", Theme.Semi(18f), Theme.Text, BackColor);
-            sub = Theme.Label("Clic gauche : manipuler un fader, un potentiomètre ou un bouton.  Clic droit (ou toucher le contrôle physique) : le configurer.", Theme.Ui(9.5f), Theme.Muted, BackColor);
+            sub = Theme.Label("Clic gauche : manipuler le contrôle.\nClic droit : le configurer.", Theme.Ui(9.5f), Theme.Muted, BackColor);
             capModel = Theme.Label("MODÈLE", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, BackColor);
             ddModel = new DropButton();
             foreach (var mdl in Controllers.All) ddModel.Add(mdl.Id, mdl.Name);

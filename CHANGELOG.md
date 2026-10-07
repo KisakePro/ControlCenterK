@@ -2,6 +2,19 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.3] - 2026-10-07
+
+- Nouvelle numérotation des versions : 0.3.
+- Barre latérale en sections : profil actif sous le nom de l'application, section « Audio »
+  (Contrôleur, Routage, Périphériques audio) et section « Périphériques » (Souris, Clavier).
+- Module « Souris » : Corsair Nightsword RGB (DPI, fréquence, éclairage, boutons, macros),
+  avec un bouton « Détecter un bouton ».
+- Module « Clavier » (page en construction).
+- Prise en charge de plusieurs contrôleurs MIDI.
+- Paramètres regroupés par catégorie : Général, Apparence, Contrôleur MIDI, Dossier de configuration.
+- Les réglages sont enregistrés dans un dossier « config » à côté de ControlCenterK.exe
+  (repris automatiquement de l'ancien emplacement) ; le dossier peut être changé dans les paramètres.
+
 ## [1.1.0] - 2026-10-06
 
 - Le nanoKONTROL2 affiché à l'écran est interactif : glisser un fader ou un potentiomètre, appuyer

@@ -11,10 +11,11 @@ namespace ControlCenterK
     {
         readonly Engine engine;
         readonly AppConfig cfg;
-        readonly Label title, lblMem;
-        readonly Card card, infoCard, lookCard, modCard, updCard;
+        readonly Label title, lblMem, lblFolder;
+        readonly Card genCard, midiCard, infoCard, lookCard, modCard, updCard;
         Label updStatus;
-        FlatButton updInstall, updNotes, updCheck;
+        FlatButton updInstall, updNotes, updCheck, btnFolderDefault;
+        Card rowCard;   // carte en cours de remplissage par AddRow
         int y;
 
         // Apparence
@@ -47,17 +48,20 @@ namespace ControlCenterK
             Controls.Add(lookCard);
             BuildLook();
 
-            card = new Card();
-            Controls.Add(card);
-            y = Theme.S(8);
+            // --- Général ---
+            genCard = BeginCard("Général");
             AddToggle("Démarrer avec Windows", "Lance l'application en arrière-plan à l'ouverture de session.",
                 cfg.StartWithWindows, v => { cfg.StartWithWindows = v; Startup.Apply(v); });
             AddToggle("Démarrer réduit", "Au lancement, l'application reste dans la zone de notification sans ouvrir la fenêtre.",
                 cfg.StartMinimized, v => cfg.StartMinimized = v);
-            AddToggle("Retour LED sur le contrôleur", "Allume les boutons selon l'état muet / périphérique par défaut. Nécessite « LED Mode : External » dans KORG Kontrol Editor.",
-                cfg.LedFeedback, v => { cfg.LedFeedback = v; engine.OpenMidi(); });
+            EndCard();
+
+            // --- Module Contrôleur MIDI ---
+            midiCard = BeginCard("Contrôleur MIDI", Glyphs.Mixer);
             AddToggle("Sélection automatique", "Toucher un contrôle physique le sélectionne dans l'éditeur.",
                 cfg.AutoSelect, v => cfg.AutoSelect = v);
+            AddToggle("Retour LED sur le contrôleur", "Allume les boutons selon l'état muet / périphérique par défaut. Nécessite « LED Mode : External » dans KORG Kontrol Editor.",
+                cfg.LedFeedback, v => { cfg.LedFeedback = v; engine.OpenMidi(); });
 
             var curve = new DropButton();
             curve.Add("1", "Linéaire");
@@ -96,19 +100,76 @@ namespace ControlCenterK
                 MessageBox.Show(FindForm(), "Les contrôles appris ont été remis sur le mapping d'usine du contrôleur.", "ControlCenterK");
             };
             AddRow("CC appris (MIDI learn)", "Remet tous les contrôles sur le mapping d'usine du modèle choisi.", reset);
-            card.Height = y + Theme.S(8);
+            EndCard();
 
-            infoCard = new Card();
-            Controls.Add(infoCard);
-            lblMem = Theme.Label("", Theme.Ui(9f), Theme.Muted, Theme.Card);
-            lblMem.Location = new Point(Theme.S(20), Theme.S(18));
-            var openDir = new FlatButton("Ouvrir le dossier de configuration") { Glyph = Glyphs.Folder };
+            // --- Configuration ---
+            infoCard = BeginCard("Dossier de configuration", Glyphs.Folder);
+            lblFolder = Theme.Label("", Theme.Ui(9f), Theme.Text, Theme.Card);
+            lblFolder.Location = new Point(Theme.S(20), y);
+            var openDir = new FlatButton("Ouvrir") { Glyph = Glyphs.Folder };
             openDir.FitWidth();
-            openDir.Location = new Point(Theme.S(20), Theme.S(48));
             openDir.Click += (s, e) => { try { Process.Start("explorer.exe", "\"" + AppConfig.Folder + "\""); } catch { } };
-            infoCard.Controls.AddRange(new Control[] { lblMem, openDir });
-            infoCard.Height = Theme.S(100);
+            var change = new FlatButton("Changer de dossier…");
+            change.FitWidth();
+            change.Click += (s, e) => ChangeFolder(false);
+            btnFolderDefault = new FlatButton("Revenir au dossier par défaut");
+            btnFolderDefault.FitWidth();
+            btnFolderDefault.Click += (s, e) => ChangeFolder(true);
+            lblMem = Theme.Label("", Theme.Ui(8.5f), Theme.Muted, Theme.Card);
+            infoCard.Controls.AddRange(new Control[] { lblFolder, openDir, change, btnFolderDefault, lblMem });
+            infoCard.Layout += (s, e) =>
+            {
+                openDir.Location = new Point(Theme.S(20), lblFolder.Bottom + Theme.S(12));
+                change.Location = new Point(openDir.Right + Theme.S(8), openDir.Top);
+                btnFolderDefault.Location = new Point(change.Right + Theme.S(8), openDir.Top);
+                lblMem.Location = new Point(Theme.S(20), openDir.Bottom + Theme.S(16));
+                int h = lblMem.Bottom + Theme.S(18);
+                if (infoCard.Height != h) infoCard.Height = h;
+            };
+            ShowFolder();
+
+            Host.ModulesChanged += OnModulesChanged;
+            Disposed += (s, e) => Host.ModulesChanged -= OnModulesChanged;
         }
+
+        void OnModulesChanged()
+        {
+            try { if (IsHandleCreated) BeginInvoke(new Action(() => OnResize(EventArgs.Empty))); } catch { }
+        }
+
+        #region Dossier de configuration
+
+        void ShowFolder()
+        {
+            lblFolder.Text = AppConfig.Folder + (AppConfig.CustomFolder ? "" : "   (par défaut : à côté de ControlCenterK.exe)");
+            btnFolderDefault.Visible = AppConfig.CustomFolder;
+            infoCard.PerformLayout();
+        }
+
+        void ChangeFolder(bool toDefault)
+        {
+            string dir = null;
+            if (!toDefault)
+            {
+                using (var dlg = new FolderBrowserDialog())
+                {
+                    dlg.Description = "Dossier où ControlCenterK enregistre ses réglages (profils, routage, thèmes…)";
+                    dlg.SelectedPath = AppConfig.Folder;
+                    if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+                    dir = dlg.SelectedPath;
+                }
+            }
+            string target = dir ?? AppConfig.DefaultFolder;
+            if (System.IO.File.Exists(System.IO.Path.Combine(target, "config.json")) &&
+                MessageBox.Show(FindForm(), "Ce dossier contient déjà un fichier config.json.\nIl sera remplacé par vos réglages actuels. Continuer ?",
+                    "Dossier de configuration", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+            string err = cfg.ChangeFolder(dir);
+            if (err != null) MessageBox.Show(FindForm(), err, "Dossier de configuration", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ShowFolder();
+            OnResize(EventArgs.Empty);
+        }
+
+        #endregion
 
         #region Mises à jour
 
@@ -234,7 +295,9 @@ namespace ControlCenterK
                 cfg.ModRouter, v => cfg.ModRouter = v);
             AddModule(Theme.S(70) + 2 * Theme.S(66), Glyphs.Mouse, "Souris", "Réglages des souris Corsair (DPI, fréquence, éclairage) et boutons : touches, raccourcis, macros.",
                 cfg.ModMouse, v => cfg.ModMouse = v);
-            modCard.Height = Theme.S(70) + 3 * Theme.S(66) + Theme.S(8);
+            AddModule(Theme.S(70) + 3 * Theme.S(66), Glyphs.Keyboard, "Clavier", "Touches, macros et éclairage des claviers (en construction).",
+                cfg.ModKeyboard, v => cfg.ModKeyboard = v);
+            modCard.Height = Theme.S(70) + 4 * Theme.S(66) + Theme.S(8);
         }
 
         void AddModule(int y, string glyph, string label, string desc, bool value, Action<bool> apply)
@@ -422,10 +485,37 @@ namespace ControlCenterK
             AddRow(label, desc, t);
         }
 
+        /// <summary>Commence une carte de réglages avec un titre ; les AddRow suivants la remplissent.</summary>
+        Card BeginCard(string text, string glyph = null)
+        {
+            var c = new Card();
+            Controls.Add(c);
+            int x = Theme.S(20);
+            if (glyph != null)
+            {
+                var icon = Theme.Label(glyph, Theme.Icon(12f), Theme.Accent, Theme.Card);
+                icon.Location = new Point(x, Theme.S(19));
+                c.Controls.Add(icon);
+                x = Theme.S(48);
+            }
+            var t = Theme.Label(text, Theme.Semi(12f), Theme.Text, Theme.Card);
+            t.Location = new Point(x, Theme.S(16));
+            c.Controls.Add(t);
+            rowCard = c;
+            y = Theme.S(52);
+            return c;
+        }
+
+        void EndCard()
+        {
+            rowCard.Height = y + Theme.S(8);
+        }
+
         void AddRow(string label, string desc, Control right)
         {
             int h = Theme.S(66);
-            if (y > Theme.S(8))
+            var card = rowCard;
+            if (y > Theme.S(52))
             {
                 var sep = new Panel { BackColor = Theme.Border, Height = 1, Tag = "sep" };
                 sep.Location = new Point(Theme.S(20), y);
@@ -444,7 +534,7 @@ namespace ControlCenterK
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            if (infoCard == null) return;
+            if (infoCard == null || lblMem == null) return;
             int pad = Theme.S(28), w = Math.Min(ClientSize.Width - 2 * pad, Theme.S(900));
             title.Location = new Point(pad - Theme.S(2), Theme.S(20) + AutoScrollPosition.Y);
             updCard.SetBounds(pad, Theme.S(80) + AutoScrollPosition.Y, w, updCard.Height);
@@ -452,16 +542,23 @@ namespace ControlCenterK
             updStatus.MaximumSize = new Size(w - Theme.S(40), 0);
             modCard.SetBounds(pad, updCard.Bottom + Theme.S(16), w, modCard.Height);
             foreach (Control c in modCard.Controls) if ("right".Equals(c.Tag)) c.Left = w - Theme.S(20) - c.Width;
-            lookCard.SetBounds(pad, modCard.Bottom + Theme.S(16), w, lookCard.Height);
+            genCard.SetBounds(pad, modCard.Bottom + Theme.S(16), w, genCard.Height);
+            lookCard.SetBounds(pad, genCard.Bottom + Theme.S(16), w, lookCard.Height);
             LayoutLook();
-            card.SetBounds(pad, lookCard.Bottom + Theme.S(16), w, card.Height);
-            foreach (Control c in card.Controls)
-            {
-                if ("right".Equals(c.Tag)) c.Left = w - Theme.S(20) - c.Width;
-                else if ("sep".Equals(c.Tag)) c.Width = w - Theme.S(40);
-            }
-            lblMem.MaximumSize = new Size(w - Theme.S(40), 0);
-            infoCard.SetBounds(pad, card.Bottom + Theme.S(16), w, infoCard.Height);
+            int bottom = lookCard.Bottom;
+            // cartes propres à un module : affichées seulement si le module est actif
+            bool midi;
+            lock (AppConfig.Sync) midi = cfg.ModMidi;
+            midiCard.Visible = midi;
+            if (midi) { midiCard.SetBounds(pad, bottom + Theme.S(16), w, midiCard.Height); bottom = midiCard.Bottom; }
+            foreach (var card in new[] { genCard, midiCard })
+                foreach (Control c in card.Controls)
+                {
+                    if ("right".Equals(c.Tag)) c.Left = w - Theme.S(20) - c.Width;
+                    else if ("sep".Equals(c.Tag)) c.Width = w - Theme.S(40);
+                }
+            lblMem.MaximumSize = lblFolder.MaximumSize = new Size(w - Theme.S(40), 0);
+            infoCard.SetBounds(pad, bottom + Theme.S(16), w, infoCard.Height);
         }
 
         public void RefreshInfo()

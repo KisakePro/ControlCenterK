@@ -13,12 +13,15 @@ namespace ControlCenterK
     {
         readonly Engine engine;
         readonly Panel side, content;
-        readonly NavButton navCtl, navRoute, navAudio, navMouse, navSettings;
-        readonly Label capProfile;
+        readonly NavButton navCtl, navRoute, navAudio, navMouse, navKeyboard, navSettings;
+        readonly Label capProfile, capAudio, capDevices;
+        readonly List<int> separators = new List<int>(); // lignes de séparation de la barre latérale
+        bool blockAbove;                                  // mise en page : un bloc précède (séparation à tracer)
         // Pages créées à la demande : un module désactivé n'a pas de page en mémoire.
         ControllerPage pCtl;
         RouterPage pRoute;
         MousePage pMouse;
+        KeyboardPage pKeyboard;
         AudioPage pAudio;
         SettingsPage pSettings;
         string current;
@@ -52,9 +55,14 @@ namespace ControlCenterK
             navRoute = new NavButton(Glyphs.Route, "Routage");
             navAudio = new NavButton(Glyphs.Speaker, "Périphériques audio");
             navMouse = new NavButton(Glyphs.Mouse, "Souris");
+            navKeyboard = new NavButton(Glyphs.Keyboard, "Clavier");
             navSettings = new NavButton(Glyphs.Settings, "Paramètres");
-            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navSettings }) side.Controls.Add(n);
+            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navKeyboard, navSettings }) side.Controls.Add(n);
+            capAudio = Theme.Label("AUDIO", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
+            capDevices = Theme.Label("PÉRIPHÉRIQUES", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
+            side.Controls.AddRange(new Control[] { capAudio, capDevices });
             navMouse.Click += (s, e) => ShowPage("mouse");
+            navKeyboard.Click += (s, e) => ShowPage("keyboard");
             navCtl.Click += (s, e) => ShowPage("ctl");
             navRoute.Click += (s, e) => ShowPage("route");
             navAudio.Click += (s, e) => ShowPage("audio");
@@ -132,23 +140,49 @@ namespace ControlCenterK
         void LayoutNav()
         {
             var cfg = engine.Cfg;
-            navCtl.Visible = cfg.ModMidi;
-            navRoute.Visible = cfg.ModRouter;
-            navMouse.Visible = cfg.ModMouse;
-            int y = Theme.S(96);
-            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse })
+            separators.Clear();
+            blockAbove = false;
+            int y = Theme.S(84);
+            // Profil actif : juste sous le nom de l'application
+            capProfile.Visible = ddProfile.Visible = btnProfiles.Visible = cfg.ModMidi;
+            if (cfg.ModMidi)
             {
-                if ((n == navCtl && !cfg.ModMidi) || (n == navRoute && !cfg.ModRouter) || (n == navMouse && !cfg.ModMouse)) continue;
-                n.SetBounds(0, y, side.Width, n.Height);
-                y += n.Height + Theme.S(4);
+                capProfile.Location = new Point(Theme.S(24), y);
+                ddProfile.SetBounds(Theme.S(18), capProfile.Bottom + Theme.S(6), side.Width - Theme.S(18) - Theme.S(56), Theme.S(34));
+                btnProfiles.SetBounds(ddProfile.Right + Theme.S(6), ddProfile.Top, Theme.S(34), Theme.S(34));
+                y = ddProfile.Bottom + Theme.S(8);
+                blockAbove = true;
             }
+            y = NavSection(capAudio, y, new[] { navCtl, navRoute, navAudio }, new[] { cfg.ModMidi, cfg.ModRouter, true });
+            y = NavSection(capDevices, y, new[] { navMouse, navKeyboard }, new[] { cfg.ModMouse, cfg.ModKeyboard });
             // Paramètres : en bas à gauche, juste au-dessus de l'équipement connecté
             navSettings.SetBounds(0, side.ClientSize.Height - Theme.S(56) - navSettings.Height - Theme.S(4), side.Width, navSettings.Height);
-            capProfile.Visible = ddProfile.Visible = btnProfiles.Visible = cfg.ModMidi;
-            y += Theme.S(22);
-            capProfile.Location = new Point(Theme.S(24), y);
-            ddProfile.SetBounds(Theme.S(18), capProfile.Bottom + Theme.S(6), side.Width - Theme.S(18) - Theme.S(56), Theme.S(34));
-            btnProfiles.SetBounds(ddProfile.Right + Theme.S(6), ddProfile.Top, Theme.S(34), Theme.S(34));
+            separators.Add(navSettings.Top - Theme.S(8));
+            side.Invalidate();
+        }
+
+        /// <summary>Place une section de la barre latérale (titre + boutons des modules actifs) et renvoie le Y suivant.</summary>
+        int NavSection(Label cap, int y, NavButton[] navs, bool[] on)
+        {
+            bool any = false;
+            for (int i = 0; i < navs.Length; i++) { navs[i].Visible = on[i]; any |= on[i]; }
+            cap.Visible = any;
+            if (!any) return y;
+            if (blockAbove)
+            {
+                separators.Add(y + Theme.S(6));
+                y += Theme.S(18);
+            }
+            blockAbove = true;
+            cap.Location = new Point(Theme.S(24), y);
+            y = cap.Bottom + Theme.S(6);
+            for (int i = 0; i < navs.Length; i++)
+            {
+                if (!on[i]) continue;
+                navs[i].SetBounds(0, y, side.Width, navs[i].Height);
+                y += navs[i].Height + Theme.S(2);
+            }
+            return y + Theme.S(4);
         }
 
         public void OpenSettings() { ShowPage("settings"); }
@@ -163,6 +197,7 @@ namespace ControlCenterK
                 case "route": page = pRoute ?? (pRoute = Add(new RouterPage(engine))); break;
                 case "audio": page = pAudio ?? (pAudio = Add(new AudioPage(engine))); break;
                 case "mouse": page = pMouse ?? (pMouse = Add(new MousePage(engine.Cfg))); break;
+                case "keyboard": page = pKeyboard ?? (pKeyboard = Add(new KeyboardPage())); break;
                 default: key = "settings"; page = pSettings ?? (pSettings = Add(new SettingsPage(engine))); break;
             }
             current = key;
@@ -171,6 +206,7 @@ namespace ControlCenterK
             navRoute.Selected = key == "route";
             navAudio.Selected = key == "audio";
             navMouse.Selected = key == "mouse";
+            navKeyboard.Selected = key == "keyboard";
             navSettings.Selected = key == "settings";
             if (page == pAudio) pAudio.Reload();
             if (page == pSettings) pSettings.RefreshInfo();
@@ -194,8 +230,10 @@ namespace ControlCenterK
                 if (!cfg.ModMidi && pCtl != null) { content.Controls.Remove(pCtl); pCtl.Dispose(); pCtl = null; }
                 if (!cfg.ModRouter && pRoute != null) { content.Controls.Remove(pRoute); pRoute.Dispose(); pRoute = null; }
                 if (!cfg.ModMouse && pMouse != null) { content.Controls.Remove(pMouse); pMouse.Dispose(); pMouse = null; }
+                if (!cfg.ModKeyboard && pKeyboard != null) { content.Controls.Remove(pKeyboard); pKeyboard.Dispose(); pKeyboard = null; }
                 LayoutNav();
-                if ((current == "ctl" && !cfg.ModMidi) || (current == "route" && !cfg.ModRouter) || (current == "mouse" && !cfg.ModMouse)) ShowPage("settings");
+                if ((current == "ctl" && !cfg.ModMidi) || (current == "route" && !cfg.ModRouter) || (current == "mouse" && !cfg.ModMouse)
+                    || (current == "keyboard" && !cfg.ModKeyboard)) ShowPage("settings");
                 UpdateStatus();
                 side.Invalidate();
             });
@@ -431,8 +469,10 @@ namespace ControlCenterK
             Theme.FillRound(g, Theme.Accent, logo, Theme.S(9));
             TextRenderer.DrawText(g, Glyphs.Mixer, Theme.Icon(14f), Rectangle.Round(logo), Theme.OnAccent,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-            TextRenderer.DrawText(g, "ControlCenterK", Theme.Semi(11.5f), new Point(Theme.S(70), Theme.S(25)), Theme.Text);
-            TextRenderer.DrawText(g, "Audio · MIDI", Theme.Ui(9f), new Point(Theme.S(70), Theme.S(46)), Theme.Muted);
+            TextRenderer.DrawText(g, "ControlCenterK", Theme.Semi(11.5f), new Rectangle(Theme.S(70), Theme.S(26), side.Width - Theme.S(72), Theme.S(38)), Theme.Text,
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+            using (var pen = new Pen(Theme.Border))
+                foreach (int y in separators) g.DrawLine(pen, Theme.S(20), y, side.Width - Theme.S(20), y);
         }
     }
 }

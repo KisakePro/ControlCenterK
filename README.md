@@ -74,7 +74,7 @@ src/Program.cs          démarrage, instance unique, icône de notification
 src/Engine.cs           thread worker : MIDI -> volumes / actions / LED
 src/CoreAudio.cs        accès WASAPI (volumes, sessions, périphérique par défaut)
 src/Midi.cs             entrée / sortie MIDI (winmm)
-src/Config.cs           configuration (%APPDATA%\ControlCenterK\config.json)
+src/Config.cs           configuration (dossier config\ à côté du .exe, modifiable dans Paramètres)
 src/Router/*            module de routage : flux WASAPI, rééchantillonnage, mixage
 src/Controller.cs       disposition et CC d'usine du nanoKONTROL2
 src/UI/*                interface sombre

@@ -62,9 +62,38 @@ namespace ControlCenterKSetup
             }
         }
 
-        public static string ConfigDir
+        /// <summary>Ancien emplacement des réglages (jusqu'à la version 1.1.0).</summary>
+        public static string AppDataConfigDir
         {
             get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ControlCenterK"); }
+        }
+
+        /// <summary>Dossier des réglages : même règle que l'application (dossier choisi, sinon "config" à côté du .exe).</summary>
+        public static string ConfigDir(string installDir)
+        {
+            try
+            {
+                using (var k = Registry.CurrentUser.OpenSubKey(@"Software\ControlCenterK"))
+                {
+                    var d = k == null ? null : k.GetValue("ConfigFolder") as string;
+                    if (!string.IsNullOrEmpty(d) && Directory.Exists(d)) return d;
+                }
+            }
+            catch { }
+            string local = Path.Combine(installDir, "config");
+            return File.Exists(Path.Combine(local, "config.json")) ? local : AppDataConfigDir;
+        }
+
+        /// <summary>Supprime les fichiers de réglages d'un dossier, puis le dossier s'il est vide (jamais les autres fichiers de l'utilisateur).</summary>
+        static void DeleteSettings(string folder)
+        {
+            try
+            {
+                if (!Directory.Exists(folder)) return;
+                foreach (var f in Directory.GetFiles(folder, "config*.json*")) try { File.Delete(f); } catch { }
+                if (Directory.GetFileSystemEntries(folder).Length == 0) Directory.Delete(folder);
+            }
+            catch { }
         }
 
         /// <summary>Ferme proprement l'application si elle tourne (elle enregistre ses réglages avant de quitter).</summary>
@@ -172,8 +201,9 @@ namespace ControlCenterKSetup
         /// <summary>Désinstalle l'application. Les réglages ne sont supprimés que si demandé.</summary>
         public static void Uninstall(string dir, bool removeSettings, Action<string> step)
         {
+            string config = ConfigDir(dir);
             step("Retrait des périphériques virtuels…");
-            ForgetVirtualDevices();
+            ForgetVirtualDevices(config);
 
             step("Suppression des raccourcis et des entrées Windows…");
             foreach (var l in new[] { StartMenuLink, DesktopLink }) try { if (File.Exists(l)) File.Delete(l); } catch { }
@@ -190,7 +220,13 @@ namespace ControlCenterKSetup
 
             step("Suppression des fichiers…");
             try { File.Delete(Path.Combine(dir, ExeName)); } catch { }
-            if (removeSettings) try { Directory.Delete(ConfigDir, true); } catch { }
+            if (removeSettings)
+            {
+                DeleteSettings(config);
+                DeleteSettings(Path.Combine(dir, "config"));
+                DeleteSettings(AppDataConfigDir);
+                try { Registry.CurrentUser.DeleteSubKeyTree(@"Software\ControlCenterK", false); } catch { }
+            }
 
             // uninstall.exe ne peut pas s'effacer lui-même : un petit script le fait une fois fermé
             string self = Application.ExecutablePath;
@@ -200,19 +236,24 @@ namespace ControlCenterKSetup
                     "/c ping 127.0.0.1 -n 3 > nul & del /f /q \"" + self + "\" & rmdir \"" + dir + "\"")
                     { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
             }
-            else try { Directory.Delete(dir, true); } catch { }
+            else
+            {
+                // jamais de suppression récursive : le sous-dossier "config" (réglages conservés) doit rester
+                try { File.Delete(Path.Combine(dir, "uninstall.exe")); } catch { }
+                try { Directory.Delete(dir, false); } catch { }
+            }
         }
 
         /// <summary>Demande au pilote USB/IP d'arrêter de rattacher les périphériques virtuels créés par l'app.</summary>
-        static void ForgetVirtualDevices()
+        static void ForgetVirtualDevices(string configDir)
         {
             try
             {
                 string usbip = null;
                 foreach (var root in new[] { Environment.GetEnvironmentVariable("ProgramW6432"), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) })
                     if (!string.IsNullOrEmpty(root) && File.Exists(Path.Combine(root, "USBip", "usbip.exe"))) usbip = Path.Combine(root, "USBip", "usbip.exe");
-                string cfg = Path.Combine(ConfigDir, "config.json");
-                if (!File.Exists(cfg)) cfg = Path.Combine(Path.GetDirectoryName(ConfigDir), Legacy, "config.json");
+                string cfg = Path.Combine(configDir, "config.json");
+                if (!File.Exists(cfg)) cfg = Path.Combine(Path.GetDirectoryName(AppDataConfigDir), Legacy, "config.json");
                 if (usbip == null || !File.Exists(cfg)) return;
                 var root2 = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(cfg));
                 var router = root2.ContainsKey("Router") ? root2["Router"] as Dictionary<string, object> : null;
