@@ -224,12 +224,14 @@ namespace ControlCenterK
 
             var fx = new DropButton { Width = Theme.S(220) };
             fx.Add("device", "Géré par le clavier");
-            fx.Add("static", "Couleurs fixes");
+            fx.Add("static", dev.PerKey ? "Couleurs des touches" : "Couleur fixe");
+            if (dev.PerKey) fx.Add("gradient", "Dégradé");
             fx.Add("breathe", "Respiration");
+            fx.Add("cycle", "Cycle de couleurs");
             fx.Add("rainbow", "Arc-en-ciel");
             if (dev.PerKey)
             {
-                fx.Add("wave", "Vague arc-en-ciel");
+                fx.Add("wave", "Vague");
                 fx.Add("reactive", "Réactif (touches pressées)");
             }
             fx.Add("off", "Éteint");
@@ -247,6 +249,17 @@ namespace ControlCenterK
             };
             Row(c, "Couleur principale", null, main);
 
+            // couleurs de l'effet : glisser une couleur de la palette dessus, clic pour modifier, clic droit pour retirer
+            var effectCols = new Swatches(D.EffectColors) { Columns = 12, MinCount = 1, Size_ = Theme.S(26) };
+            effectCols.FitHeight();
+            effectCols.ItemClicked += (i, col) => effectCols.Edit(i);
+            effectCols.ListChanged += () =>
+            {
+                Save(() => { if (D.Effect == "device" || D.Effect == "static" || D.Effect == "off") D.Effect = dev.PerKey ? "gradient" : "cycle"; });
+                if (D.Effect != fx.Value) fx.Value = D.Effect;
+            };
+            Row(c, "Couleurs de l'effet", "Dégradé, respiration, cycle, vague et réactif utilisent ces couleurs. Clic : modifier · clic droit : retirer.", effectCols);
+
             var speed = new DropButton { Width = Theme.S(220) };
             for (int i = 1; i <= 10; i++) speed.Add(i.ToString(), i == 1 ? "1 (lent)" : i == 10 ? "10 (rapide)" : i.ToString());
             speed.Value = D.Speed.ToString();
@@ -262,7 +275,29 @@ namespace ControlCenterK
             if (dev.PerKey)
             {
                 int y = NextY(c) + Theme.S(4);
-                view = new KeyboardView { Location = new Point(Theme.S(20), y), Width = Theme.S(860), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                // palette à droite du clavier : glisser une couleur sur une touche (ou sur la sélection)
+                var palette = new Swatches(K.Palette) { Columns = 2, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                palette.FitHeight();
+                var palCap = Theme.Label("PALETTE", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Card);
+                palCap.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                palette.Location = new Point(c.Width - Theme.S(20) - palette.Width, y + Theme.S(18));
+                palCap.Location = new Point(palette.Left, y);
+                palette.ListChanged += () => cfg.Save();
+                c.Controls.Add(palCap);
+                c.Controls.Add(palette);
+                view = new KeyboardView { Location = new Point(Theme.S(20), y), Width = palette.Left - Theme.S(36), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                Action<IEnumerable<int>, Color> paintKeys = (keys, col) =>
+                {
+                    string hex = Theme.ToHex(col);
+                    Save(() =>
+                    {
+                        foreach (int u in keys) D.Keys[u.ToString("x2")] = hex;
+                        if (D.Effect != "static" && D.Effect != "reactive") D.Effect = "static";
+                    });
+                    if (D.Effect != fx.Value) fx.Value = D.Effect;
+                };
+                view.KeysPainted += paintKeys;
+                palette.ItemClicked += (i, col) => { if (view.Selected.Count > 0) paintKeys(new List<int>(view.Selected), col); };
                 view.Lit = new HashSet<int>(dev.Keys);
                 view.ColorOf = u =>
                 {
@@ -272,6 +307,12 @@ namespace ControlCenterK
                 c.Controls.Add(view);
                 y = view.Bottom + Theme.S(10);
 
+                var tip = Theme.Label("Glissez une couleur de la palette sur une touche (sur la sélection : toutes les touches sélectionnées ; Ctrl maintenu : peint les touches survolées). " +
+                    "Clic sur une couleur : colore la sélection.", Theme.Ui(8.5f), Theme.Muted, Theme.Card);
+                tip.MaximumSize = new Size(Theme.S(820), 0);
+                tip.Location = new Point(Theme.S(20), y);
+                c.Controls.Add(tip);
+                y = Math.Max(tip.Bottom + Theme.S(8), palette.Bottom + Theme.S(8));
                 var info = Theme.Label("Aucune touche sélectionnée.", Theme.Ui(9f), Theme.Muted, Theme.Card);
                 var paint = new FlatButton("Colorer la sélection…", true) { Glyph = Glyphs.Palette, Enabled = false };
                 paint.FitWidth();
@@ -300,13 +341,7 @@ namespace ControlCenterK
                     foreach (int u in view.Selected) { first = u; break; }
                     var col = PickColor(view.ColorOf(first));
                     if (!col.HasValue) return;
-                    string hex = Theme.ToHex(col.Value);
-                    Save(() =>
-                    {
-                        foreach (int u in view.Selected) D.Keys[u.ToString("x2")] = hex;
-                        if (D.Effect == "device" || D.Effect == "rainbow" || D.Effect == "wave" || D.Effect == "off") D.Effect = "static";
-                    });
-                    if (D.Effect != fx.Value) fx.Value = D.Effect;
+                    paintKeys(new List<int>(view.Selected), col.Value);
                 };
                 reset.Click += (s, e) => Save(() => { foreach (int u in view.Selected) D.Keys.Remove(u.ToString("x2")); });
                 all.Click += (s, e) => { foreach (int u in dev.Keys) view.Selected.Add(u); view.Invalidate(); sync(); };

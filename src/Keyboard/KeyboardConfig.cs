@@ -12,9 +12,12 @@ namespace ControlCenterK
         public int Brightness { get; set; }     // 10..100 %
         /// <summary>Couleurs propres à certaines touches : code HID en hexadécimal ("04") → #RRGGBB.</summary>
         public Dictionary<string, string> Keys { get; set; }
+        /// <summary>Couleurs choisies pour les effets (respiration, cycle, dégradé, vague, réactif).</summary>
+        public List<string> EffectColors { get; set; }
 
         public KeyboardDeviceConfig()
         {
+            EffectColors = new List<string> { "#FF2D55", "#4C8DFF" };
             Name = "";
             Effect = "device";
             Color = "#4C8DFF";
@@ -29,6 +32,7 @@ namespace ControlCenterK
             if (Effect == null) Effect = "device";
             if (Color == null) Color = "#4C8DFF";
             if (Keys == null) Keys = new Dictionary<string, string>();
+            if (EffectColors == null || EffectColors.Count == 0) EffectColors = new List<string> { "#FF2D55", "#4C8DFF" };
             if (Speed < 1 || Speed > 10) Speed = 5;
             if (Brightness < 10 || Brightness > 100) Brightness = 100;
         }
@@ -41,9 +45,12 @@ namespace ControlCenterK
         public string Selected { get; set; }
         /// <summary>Macros : "key:xx" (code HID) → action. Valables pour tous les claviers.</summary>
         public Dictionary<string, MouseAction> Macros { get; set; }
+        /// <summary>Palette de couleurs à glisser sur les touches.</summary>
+        public List<string> Palette { get; set; }
 
         public KeyboardConfig()
         {
+            Palette = DefaultPalette();
             Devices = new Dictionary<string, KeyboardDeviceConfig>();
             Macros = new Dictionary<string, MouseAction>();
         }
@@ -57,10 +64,16 @@ namespace ControlCenterK
             return d;
         }
 
+        static List<string> DefaultPalette()
+        {
+            return new List<string> { "#FF2020", "#FF8A00", "#FFD400", "#2BD65A", "#00D1C1", "#4C8DFF", "#8A4CFF", "#FF4CB8", "#FFFFFF" };
+        }
+
         public void Fix()
         {
             if (Devices == null) Devices = new Dictionary<string, KeyboardDeviceConfig>();
             if (Macros == null) Macros = new Dictionary<string, MouseAction>();
+            if (Palette == null) Palette = DefaultPalette();
             foreach (var d in Devices.Values) if (d != null) d.Fix();
             foreach (var k in new List<string>(Macros.Keys)) if (Macros[k] == null) Macros.Remove(k);
         }

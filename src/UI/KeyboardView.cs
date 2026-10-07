@@ -14,6 +14,11 @@ namespace ControlCenterK
         /// <summary>Couleur affichée pour une touche.</summary>
         public Func<int, Color> ColorOf = u => Theme.Accent;
         public event Action SelectionChanged;
+        /// <summary>Couleur déposée sur des touches (glisser-déposer depuis la palette).</summary>
+        public event Action<IEnumerable<int>, Color> KeysPainted;
+
+        readonly HashSet<int> painted = new HashSet<int>();
+        int dropKey = -1;
 
         readonly Dictionary<int, int> flash = new Dictionary<int, int>();
         readonly Timer flashTimer = new Timer { Interval = 60 };
@@ -23,6 +28,7 @@ namespace ControlCenterK
         {
             Height = Theme.S(230);
             Cursor = Cursors.Hand;
+            AllowDrop = true;
             flashTimer.Tick += (s, e) =>
             {
                 int now = Environment.TickCount;
@@ -78,6 +84,50 @@ namespace ControlCenterK
             dragging = false;
         }
 
+        protected override void OnDragEnter(DragEventArgs e)
+        {
+            base.OnDragEnter(e);
+            painted.Clear();
+        }
+
+        protected override void OnDragOver(DragEventArgs e)
+        {
+            base.OnDragOver(e);
+            if (!e.Data.GetDataPresent(typeof(Color))) { e.Effect = DragDropEffects.None; return; }
+            e.Effect = DragDropEffects.Copy;
+            var k = Hit(PointToClient(new Point(e.X, e.Y)));
+            int u = k != null && Lit.Contains(k.Usage) ? k.Usage : -1;
+            if (u != dropKey) { dropKey = u; Invalidate(); }
+            // Ctrl maintenu : chaque touche survolée est peinte (on « dessine » avec la couleur)
+            if (u >= 0 && (e.KeyState & 8) != 0 && painted.Add(u)) PaintKeys(new[] { u }, (Color)e.Data.GetData(typeof(Color)));
+        }
+
+        protected override void OnDragLeave(EventArgs e)
+        {
+            base.OnDragLeave(e);
+            dropKey = -1;
+            Invalidate();
+        }
+
+        protected override void OnDragDrop(DragEventArgs e)
+        {
+            base.OnDragDrop(e);
+            dropKey = -1;
+            if (!e.Data.GetDataPresent(typeof(Color))) return;
+            var k = Hit(PointToClient(new Point(e.X, e.Y)));
+            if (k == null || !Lit.Contains(k.Usage)) { Invalidate(); return; }
+            // déposée sur une touche sélectionnée : toute la sélection prend la couleur
+            IEnumerable<int> keys = Selected.Contains(k.Usage) ? (IEnumerable<int>)new List<int>(Selected) : new[] { k.Usage };
+            PaintKeys(keys, (Color)e.Data.GetData(typeof(Color)));
+        }
+
+        void PaintKeys(IEnumerable<int> keys, Color c)
+        {
+            var h = KeysPainted;
+            if (h != null) h(keys, c);
+            Invalidate();
+        }
+
         void Apply(KeyDef k)
         {
             bool changed = dragSelect ? Selected.Add(k.Usage) : Selected.Remove(k.Usage);
@@ -105,7 +155,7 @@ namespace ControlCenterK
                     // fond : couleur de la touche atténuée, plus vive au passage d'une touche pressée
                     Color fill = lit ? Theme.Mix(Theme.Surface, c, flashing ? 0.9f : 0.55f) : Theme.Surface;
                     Theme.FillRound(g, fill, r, Math.Max(2f, u * 0.12f));
-                    if (Selected.Contains(k.Usage))
+                    if (Selected.Contains(k.Usage) || k.Usage == dropKey)
                         using (var pen = new Pen(Theme.Text, Math.Max(1.5f, u * 0.07f)))
                             g.DrawRectangle(pen, r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2);
                     string label = KeyLayout.LabelOf(k);

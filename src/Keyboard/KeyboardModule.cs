@@ -142,7 +142,7 @@ namespace ControlCenterK
                 StopAnim();
                 d.Release();
             }
-            else if (fx == "static" || fx == "off")
+            else if (fx == "static" || fx == "off" || fx == "gradient")
             {
                 StopAnim();
                 Frame(d, c, 0);
@@ -178,13 +178,26 @@ namespace ControlCenterK
             return Color.FromArgb((int)(c.R * f), (int)(c.G * f), (int)(c.B * f));
         }
 
+        /// <summary>Couleur à la position "p" d'un dégradé passant par les couleurs (cyclique : revient à la première).</summary>
+        static Color Gradient(List<Color> cols, double p, bool cyclic)
+        {
+            if (cols.Count == 0) return Color.Black;
+            if (cols.Count == 1) return cols[0];
+            int n = cyclic ? cols.Count : cols.Count - 1;
+            p = cyclic ? (p % 1 + 1) % 1 : Math.Max(0, Math.Min(1, p));
+            double f = p * n;
+            int i = Math.Min(n - 1, (int)f);
+            return Theme.Mix(cols[i], cols[(i + 1) % cols.Count], (float)(f - i));
+        }
+
         /// <summary>Calcule et envoie une image de l'effet à l'instant t (secondes).</summary>
         static void Frame(RgbKeyboard d, KeyboardDeviceConfig c, double t)
         {
             string fx;
             Color main;
             double speed, bright;
-            Dictionary<int, Color> custom = new Dictionary<int, Color>();
+            var custom = new Dictionary<int, Color>();
+            var ec = new List<Color>();
             lock (AppConfig.Sync)
             {
                 fx = c.Effect;
@@ -196,10 +209,15 @@ namespace ControlCenterK
                     int u;
                     if (int.TryParse(kv.Key, System.Globalization.NumberStyles.HexNumber, null, out u)) custom[u] = Theme.FromHex(kv.Value, main);
                 }
+                foreach (var h in c.EffectColors) ec.Add(Theme.FromHex(h, main));
             }
+            if (ec.Count == 0) ec.Add(main);
             double ts = t * speed;
             Func<int, Color> keyColor = u => { Color x; return custom.TryGetValue(u, out x) ? x : main; };
-            double breathe = 0.08 + 0.92 * (0.5 + 0.5 * Math.Sin(ts * Math.PI));
+            // respiration : une couleur de l'effet par souffle
+            double breathe = 0.08 + 0.92 * (0.5 + 0.5 * Math.Sin(ts * Math.PI - Math.PI / 2));
+            Color breathColor = ec[(int)(ts / 2) % ec.Count];
+            Color cycle = Gradient(ec, ts * 0.25, true);
             int now = Environment.TickCount;
 
             if (!d.PerKey)
@@ -208,9 +226,11 @@ namespace ControlCenterK
                 switch (fx)
                 {
                     case "off": one = Color.Black; break;
-                    case "breathe": one = Scale(main, breathe); break;
-                    case "rainbow":
-                    case "wave": one = Theme.Hsl(ts * 60 % 360, 1, 0.5); break;
+                    case "breathe": one = Scale(breathColor, breathe); break;
+                    case "cycle":
+                    case "wave": one = cycle; break;
+                    case "gradient": one = ec[0]; break;
+                    case "rainbow": one = Theme.Hsl(ts * 60 % 360, 1, 0.5); break;
                     default: one = main; break;
                 }
                 d.SetAll(Scale(one, bright));
@@ -222,19 +242,22 @@ namespace ControlCenterK
             {
                 Color col;
                 var k = KeyLayout.Get(u);
-                float x = k != null ? k.X + k.W / 2 : 0;
+                float x = k != null ? (k.X + k.W / 2) / KeyLayout.Width : 0;
                 switch (fx)
                 {
                     case "off": col = Color.Black; break;
-                    case "breathe": col = Scale(keyColor(u), breathe); break;
+                    case "breathe": col = Scale(breathColor, breathe); break;
+                    case "cycle": col = cycle; break;
+                    case "gradient": col = Gradient(ec, x, false); break;
                     case "rainbow": col = Theme.Hsl(ts * 60 % 360, 1, 0.5); break;
-                    case "wave": col = Theme.Hsl(((ts * 90 - x * 16) % 360 + 360) % 360, 1, 0.5); break;
+                    case "wave": col = Gradient(ec, ts * 0.35 - x, true); break;
                     case "reactive":
                         {
                             double flash = 0;
                             int at;
                             lock (pressedAt) if (pressedAt.TryGetValue(u, out at)) flash = 1 - (now - at) / (700.0 / speed * 1.4);
-                            col = Scale(keyColor(u), Math.Max(0.06, flash));
+                            // fond : couleur de la touche atténuée ; appui : première couleur de l'effet qui s'estompe
+                            col = Theme.Mix(Scale(keyColor(u), 0.12), ec[0], (float)Math.Max(0, Math.Min(1, flash)));
                             break;
                         }
                     default: col = keyColor(u); break;

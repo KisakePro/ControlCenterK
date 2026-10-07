@@ -24,6 +24,15 @@ namespace ControlCenterK
         /// <summary>Un « mode avancé » (mode logiciel) est nécessaire pour l'éclairage et les boutons supplémentaires.</summary>
         public virtual bool HasAdvancedMode { get { return false; } }
 
+        /// <summary>Préfixe des identifiants de boutons supplémentaires dans la configuration ("cor:3", "ss:0"…).</summary>
+        public virtual string ButtonPrefix { get { return "cor:"; } }
+
+        /// <summary>Boutons supplémentaires connus d'avance (n° = position) ; vide si on les découvre en les pressant.</summary>
+        public virtual string[] ExtraButtons { get { return new string[0]; } }
+
+        /// <summary>Bouton supplémentaire reprogrammé pour envoyer cette touche (F13…F24), -1 sinon.</summary>
+        public virtual int KeyButton(int vk) { return -1; }
+
         /// <summary>Bouton supplémentaire pressé (true) / relâché (false), par n° de bouton. Thread de lecture.</summary>
         public event Action<int, bool> Button;
 

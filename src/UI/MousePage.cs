@@ -31,8 +31,9 @@ namespace ControlCenterK
             Controls.Add(scroll);
             MouseModule.Changed += OnChanged;
             MouseModule.ButtonEvent += OnButton;
-            Disposed += (s, e) => { MouseModule.Changed -= OnChanged; MouseModule.ButtonEvent -= OnButton; if (detecting) MouseModule.CancelDetect(); };
-            VisibleChanged += (s, e) => { if (!Visible && detecting) StopDetect(null); };
+            Disposed += (s, e) => { MouseModule.Changed -= OnChanged; MouseModule.ButtonEvent -= OnButton; if (detecting) MouseModule.CancelDetect(); MouseModule.Watching = false; };
+            // page affichée : les boutons pressés sont mis en évidence dans la liste
+            VisibleChanged += (s, e) => { if (!Visible && detecting) StopDetect(null); MouseModule.Watching = Visible; };
             Rebuild();
         }
 
@@ -257,11 +258,17 @@ namespace ControlCenterK
                     lock (AppConfig.Sync) D.Advanced = adv.Checked;
                     cfg.Save();
                     MouseModule.ApplyDevice();
+                    MouseModule.UpdateHook();
                     Rebuild();
                 };
-                Row(c, "Mode avancé (éclairage et tous les boutons)",
-                    "Nécessaire pour l'éclairage et pour réaffecter les boutons DPI, sniper et latéraux. Les clics, la molette et précédent / suivant restent normaux.\n" +
-                    "En mode avancé, les boutons DPI et sniper sont gérés par l'application (réglables ci-dessous).", adv);
+                if (dev is CorsairMouse)
+                    Row(c, "Mode avancé (éclairage et tous les boutons)",
+                        "Nécessaire pour l'éclairage et pour réaffecter les boutons DPI, sniper et latéraux. Les clics, la molette et précédent / suivant restent normaux.\n" +
+                        "En mode avancé, les boutons DPI et sniper sont gérés par l'application (réglables ci-dessous).", adv);
+                else
+                    Row(c, "Mode avancé (tous les boutons)",
+                        dev.ExtraButtons.Length + " boutons supplémentaires sont reprogrammés pour être reconnus par l'application.\n" +
+                        "En mémoire vive seulement : la souris retrouve ses réglages d'usine au rebranchement.", adv);
             }
             else SetNextY(c, NextY(c));
             return c;
@@ -378,7 +385,7 @@ namespace ControlCenterK
         {
             var c = NewCard("Boutons",
                 "Milieu, précédent et suivant : réaffectés pour toutes les souris. " +
-                (dev != null && dev.HasAdvancedMode ? (D.Advanced ? "Autres boutons (DPI, sniper, latéraux) : utilisez « Détecter un bouton »."
+                (dev != null && dev.HasAdvancedMode ? (D.Advanced ? (dev.ExtraButtons.Length > 0 ? "Tous les boutons de la souris sont listés ci-dessous." : "Autres boutons (DPI, sniper, latéraux) : utilisez « Détecter un bouton ».")
                                                                   : "Pour les boutons DPI, sniper et latéraux supplémentaires : activez le mode avancé.")
                                                     : "Les autres boutons restent gérés par la souris.") +
                 "\nMacro : étapes séparées par des virgules — ex. « Ctrl+C, 50ms, Ctrl+V » ou « \"bonjour\", Entrée » ; « x3 » répète une étape.");
@@ -392,8 +399,11 @@ namespace ControlCenterK
             c.Controls.Add(lastButton);
             SetNextY(c, detectBtn.Bottom + Theme.S(12));
 
-            var ids = new List<string> { "hid:2", "hid:3", "hid:4" };
-            lock (AppConfig.Sync) foreach (var k in M.Buttons.Keys) if (k.StartsWith("cor:")) ids.Add(k);
+            var ids = new List<string> { "hid:2", "hid:3", "hid:4", "hid:tl", "hid:tr" };
+            // boutons supplémentaires connus d'avance (SteelSeries en mode avancé), sinon ceux déjà détectés (Corsair)
+            if (dev != null && D != null && D.Advanced)
+                for (int i = 0; i < dev.ExtraButtons.Length; i++) ids.Add(dev.ButtonPrefix + i);
+            lock (AppConfig.Sync) foreach (var k in M.Buttons.Keys) if (k.StartsWith("cor:") && !ids.Contains(k)) ids.Add(k);
             foreach (var id in ids) AddButtonRow(c, id);
             return c;
         }
@@ -405,8 +415,14 @@ namespace ControlCenterK
                 case "hid:2": return "Bouton du milieu";
                 case "hid:3": return "Précédent (latéral)";
                 case "hid:4": return "Suivant (latéral)";
+                case "hid:tl": return "Molette inclinée à gauche";
+                case "hid:tr": return "Molette inclinée à droite";
             }
-            return "Bouton " + id.Substring(4);
+            var dev = MouseModule.Device;
+            int n;
+            if (dev != null && id.StartsWith(dev.ButtonPrefix) && int.TryParse(id.Substring(dev.ButtonPrefix.Length), out n) && n < dev.ExtraButtons.Length)
+                return dev.ExtraButtons[n];
+            return "Bouton " + id.Substring(id.IndexOf(':') + 1);
         }
 
         void AddButtonRow(Card c, string id)
@@ -425,6 +441,7 @@ namespace ControlCenterK
 
             var kind = new DropButton { Width = Theme.S(220), Location = new Point(nameHolder.Right + Theme.S(10), Theme.S(6)) };
             kind.Add("", id.StartsWith("hid:") ? "Comportement normal" : "Aucune action");
+            if (id.StartsWith("hid:")) kind.Add("none", "Désactivé");
             kind.Add("keys", "Touche / raccourci clavier");
             kind.Add("macro", "Macro");
             kind.Add("click", "Clic de souris");
@@ -501,7 +518,7 @@ namespace ControlCenterK
 
         void Store(string id, MouseAction a)
         {
-            if (id.StartsWith("hid:") && string.IsNullOrEmpty(a.Kind) && string.IsNullOrEmpty(a.Value)) M.Buttons.Remove(id);
+            if (!id.StartsWith("cor:") && string.IsNullOrEmpty(a.Kind) && string.IsNullOrEmpty(a.Value)) M.Buttons.Remove(id);
             else M.Buttons[id] = a;
         }
 

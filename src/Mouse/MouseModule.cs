@@ -54,6 +54,7 @@ namespace ControlCenterK
         {
             Running = false;
             RemoveHook();
+            if (keyHook != IntPtr.Zero) { UnhookWindowsHookEx(keyHook); keyHook = IntPtr.Zero; }
             StopEffect();
             if (rescan != null) { rescan.Dispose(); rescan = null; }
             lock (gate) { Disconnect(); probed = false; detected = new List<DetectedMouse>(); }
@@ -355,7 +356,8 @@ namespace ControlCenterK
 
         static void OnDeviceButton(int bit, bool down)
         {
-            string id = "cor:" + bit;
+            var d = dev;
+            string id = (d != null ? d.ButtonPrefix : "cor:") + bit;
             var h = ButtonEvent;
             if (h != null) h(id, down);
             if (TakeDetect(id, down)) return;
@@ -392,24 +394,75 @@ namespace ControlCenterK
         static IntPtr hook;
         static HookProc hookProc; // gardé en champ pour le GC
 
-        /// <summary>Installe le crochet seulement si un bouton standard est réaffecté (sinon : aucun coût).</summary>
+        static IntPtr keyHook;
+        static HookProc keyHookProc;
+        static bool watching;
+
+        /// <summary>Page Souris affichée : les boutons pressés y sont mis en évidence (crochet installé le temps de l'affichage).</summary>
+        public static bool Watching
+        {
+            get { return watching; }
+            set { watching = value; UpdateHook(); }
+        }
+
+        /// <summary>
+        /// Crochet souris seulement si un bouton standard est réaffecté, une détection est en cours ou la page est affichée ;
+        /// crochet clavier seulement si une souris SteelSeries est en mode avancé (ses boutons envoient F13…F24).
+        /// À appeler depuis le thread de l'interface (les crochets ont besoin de sa boucle de messages).
+        /// </summary>
         public static void UpdateHook()
         {
-            bool need;
-            lock (AppConfig.Sync)
-            {
-                need = false;
-                foreach (var kv in M.Buttons)
-                    if (kv.Key.StartsWith("hid:") && !string.IsNullOrEmpty(kv.Value.Kind)) need = true;
-            }
-            if (detect != null) need = true; // la détection doit aussi voir milieu / précédent / suivant
+            bool need = false, keys = false;
+            if (cfg != null)
+                lock (AppConfig.Sync)
+                {
+                    foreach (var kv in M.Buttons)
+                        if (kv.Key.StartsWith("hid:") && !string.IsNullOrEmpty(kv.Value.Kind)) need = true;
+                    foreach (var kv in M.Devices)
+                        if (kv.Value.Advanced && kv.Key.StartsWith("1038:")) keys = true;
+                }
+            if (detect != null || watching) need = true;
             if (need && Running && hook == IntPtr.Zero)
             {
                 hookProc = HookCallback;
                 hook = SetWindowsHookEx(14 /* WH_MOUSE_LL */, hookProc, GetModuleHandle(null), 0);
             }
             else if ((!need || !Running) && hook != IntPtr.Zero) RemoveHook();
+            if (keys && Running && keyHook == IntPtr.Zero)
+            {
+                keyHookProc = KeyHookCallback;
+                keyHook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, keyHookProc, GetModuleHandle(null), 0);
+            }
+            else if ((!keys || !Running) && keyHook != IntPtr.Zero) { UnhookWindowsHookEx(keyHook); keyHook = IntPtr.Zero; }
         }
+
+        [StructLayout(LayoutKind.Sequential)] struct KBDLL { public int vk, scan, flags, time; public IntPtr extra; }
+
+        /// <summary>Touches F13…F24 envoyées par les boutons reprogrammés d'une souris SteelSeries.</summary>
+        static IntPtr KeyHookCallback(int code, IntPtr wParam, IntPtr lParam)
+        {
+            if (code >= 0)
+            {
+                var info = (KBDLL)Marshal.PtrToStructure(lParam, typeof(KBDLL));
+                var d = dev;
+                int n = d == null || info.extra == InputSim.Tag ? -1 : d.KeyButton(info.vk);
+                if (n >= 0)
+                {
+                    int msg = wParam.ToInt32();
+                    bool down = msg == 0x100 || msg == 0x104;
+                    lock (pressedKeys)
+                    {
+                        if (down && !pressedKeys.Add(n)) return new IntPtr(1); // répétition automatique
+                        if (!down) pressedKeys.Remove(n);
+                    }
+                    ThreadPool.QueueUserWorkItem(_ => OnDeviceButton(n, down));
+                    return new IntPtr(1);
+                }
+            }
+            return CallNextHookEx(keyHook, code, wParam, lParam);
+        }
+
+        static readonly HashSet<int> pressedKeys = new HashSet<int>();
 
         static void RemoveHook()
         {
@@ -430,19 +483,22 @@ namespace ControlCenterK
                 {
                     if (msg == 0x207 || msg == 0x208) { id = "hid:2"; down = msg == 0x207; }                          // milieu
                     else if (msg == 0x20B || msg == 0x20C) { id = (info.mouseData >> 16) == 1 ? "hid:3" : "hid:4"; down = msg == 0x20B; } // précédent / suivant
+                    else if (msg == 0x20E) { id = (short)(info.mouseData >> 16) > 0 ? "hid:tr" : "hid:tl"; down = true; }               // molette inclinée
                 }
+                if (id != null && msg == 0x20E && detect != null) { TakeDetect(id, true); detectedUp = null; return new IntPtr(1); }
                 if (id != null && TakeDetect(id, down)) return new IntPtr(1); // pris par la détection : pas d'action d'origine
                 if (id != null)
                 {
                     var bh = ButtonEvent;
-                    if (bh != null) bh(id, down);
+                    if (bh != null) { bh(id, down); if (msg == 0x20E) bh(id, false); }
                     MouseAction a;
                     lock (AppConfig.Sync) M.Buttons.TryGetValue(id, out a);
                     if (a != null && !string.IsNullOrEmpty(a.Kind))
                     {
                         string cid = id;
-                        bool cdown = down;
-                        ThreadPool.QueueUserWorkItem(_ => Execute(cid, a, cdown));
+                        bool cdown = down, tilt = msg == 0x20E;
+                        // molette inclinée : pas de relâchement, on envoie appui puis relâchement
+                        ThreadPool.QueueUserWorkItem(_ => { Execute(cid, a, cdown); if (tilt) Execute(cid, a, false); });
                         return new IntPtr(1); // le clic d'origine est remplacé
                     }
                 }
