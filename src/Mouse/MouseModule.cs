@@ -8,23 +8,35 @@ using System.Windows.Forms;
 namespace ControlCenterK
 {
     /// <summary>
-    /// Module « Souris » : réglages de la souris Corsair (DPI, fréquence, éclairage) et réaffectation des boutons.
-    /// Rien ne tourne quand le module est désactivé ; activé, il n'utilise qu'un thread de lecture endormi
-    /// (mode avancé) et un crochet souris uniquement si un bouton standard est réaffecté.
+    /// Module « Souris » : détection automatique des souris branchées, réglages des souris prises en charge
+    /// (DPI, fréquence, éclairage : Corsair, Logitech, Razer, SteelSeries) et réaffectation des boutons.
+    /// Rien ne tourne quand le module est désactivé ; activé, la détection ne s'exécute qu'au branchement
+    /// d'un périphérique, et un crochet souris n'est installé que si un bouton standard est réaffecté.
     /// </summary>
     static class MouseModule
     {
         static AppConfig cfg;
-        static volatile CorsairMouse dev;
+        static volatile GamingMouse dev;
+        static MouseDeviceConfig dc;
+        static List<DetectedMouse> detected = new List<DetectedMouse>();
         static readonly object gate = new object();
-        static System.Threading.Timer effectTimer;
+        static System.Threading.Timer effectTimer, rescan;
         static int sniperReturn = -1;
+        static volatile bool scanning;
+        static bool probed;                  // les souris de "detected" ont déjà été essayées
         static readonly HashSet<string> held = new HashSet<string>();
 
         public static bool Running { get; private set; }
-        public static CorsairMouse Device { get { return dev; } }
+        /// <summary>Souris réglable pilotée en ce moment (null si aucune).</summary>
+        public static GamingMouse Device { get { return dev; } }
+        /// <summary>Réglages enregistrés de la souris pilotée.</summary>
+        public static MouseDeviceConfig DeviceConfig { get { return dc; } }
+        /// <summary>Toutes les souris branchées (réglables ou non).</summary>
+        public static List<DetectedMouse> Detected { get { lock (gate) return new List<DetectedMouse>(detected); } }
+        /// <summary>Détection en cours (premier passage ou branchement).</summary>
+        public static bool Scanning { get { return scanning; } }
 
-        /// <summary>Souris connectée / déconnectée.</summary>
+        /// <summary>Souris détectée / débranchée / changée.</summary>
         public static event Action Changed;
         /// <summary>Un bouton a été pressé / relâché (identifiant, appui). Thread quelconque.</summary>
         public static event Action<string, bool> ButtonEvent;
@@ -35,8 +47,8 @@ namespace ControlCenterK
         {
             cfg = c;
             Running = true;
-            Connect();
             UpdateHook();
+            Rescan(0);
         }
 
         public static void Stop()
@@ -44,15 +56,8 @@ namespace ControlCenterK
             Running = false;
             RemoveHook();
             StopEffect();
-            lock (gate)
-            {
-                if (dev != null)
-                {
-                    try { if (M.Advanced) dev.SetSoftwareMode(false); } catch { }
-                    dev.Dispose();
-                    dev = null;
-                }
-            }
+            if (rescan != null) { rescan.Dispose(); rescan = null; }
+            lock (gate) { Disconnect(); probed = false; detected = new List<DetectedMouse>(); }
             Raise();
         }
 
@@ -62,56 +67,101 @@ namespace ControlCenterK
             if (h != null) h();
         }
 
-        #region Connexion
+        #region Détection et connexion
 
-        static void Connect()
+        /// <summary>Lance une détection en arrière-plan après "delay" ms (les notifications de branchement arrivent en rafale).</summary>
+        static void Rescan(int delay)
         {
-            lock (gate)
-            {
-                if (dev != null) return;
-                dev = CorsairMouse.Find();
-                if (dev == null) { Raise(); return; }
-                dev.Button += OnCorsairButton;
-                if (!M.Imported) ImportFromDevice(dev);
-                ApplyDevice();
-            }
-            Raise();
+            if (!Running) return;
+            if (rescan == null) rescan = new System.Threading.Timer(_ => Scan(), null, Timeout.Infinite, Timeout.Infinite);
+            rescan.Change(delay, Timeout.Infinite);
         }
 
         /// <summary>Changement matériel signalé par Windows : souris branchée, débranchée, ou reconnectée (fréquence).</summary>
         public static void OnDeviceChange()
         {
+            if (Running) Rescan(800);
+        }
+
+        static void Scan()
+        {
             if (!Running) return;
             lock (gate)
             {
-                if (dev != null && dev.ReadCurrentStage() < 0)
+                scanning = true;
+                try
                 {
-                    dev.Dispose(); // la souris a disparu ou s'est reconnectée
-                    dev = null;
+                    var all = Hid.Enumerate(null);
+                    var mice = MouseDetect.List(all);
+                    bool sameMice = mice.Count == detected.Count && mice.TrueForAll(m => detected.Exists(d => d.Key == m.Key));
+                    // mêmes souris qu'au dernier passage et souris pilotée toujours là : rien à faire
+                    if (sameMice && probed && (dev == null || dev.Alive())) return;
+                    Disconnect();
+                    string preferred = M.Selected;
+                    var found = MouseDetect.Probe(all, mice, preferred);
+                    GamingMouse pick = found.Find(d => d.Key == preferred) ?? (found.Count > 0 ? found[0] : null);
+                    foreach (var d in found) if (d != pick) d.Dispose();
+                    detected = mice;
+                    probed = true;
+                    if (pick != null) Connect(pick);
                 }
+                catch { }
+                finally { scanning = false; }
             }
-            if (dev == null) Connect();
+            Raise();
+        }
+
+        static void Connect(GamingMouse d)
+        {
+            dev = d;
+            lock (AppConfig.Sync)
+            {
+                dc = M.Device(d.Key, d.Name, d.Zones);
+                if (!d.HasAdvancedMode && dc.Advanced) dc.Advanced = false;
+                if (dc.Effect == "device" && d.HasAdvancedMode) dc.Effect = "static";
+            }
+            d.Button += OnDeviceButton;
+            if (!dc.Imported) ImportFromDevice(d);
+            ApplyDevice();
+        }
+
+        static void Disconnect()
+        {
+            var d = dev;
+            if (d == null) return;
+            StopEffect();
+            try { if (d.HasAdvancedMode && dc != null && dc.Advanced) d.SetAdvanced(false); } catch { }
+            d.Button -= OnDeviceButton;
+            d.Dispose();
+            dev = null;
+            dc = null;
+        }
+
+        /// <summary>Choisit la souris à piloter quand plusieurs souris réglables sont branchées.</summary>
+        public static void Select(string key)
+        {
+            lock (AppConfig.Sync) M.Selected = key;
+            cfg.Save();
+            lock (gate) { Disconnect(); probed = false; }
+            Rescan(0);
         }
 
         /// <summary>Premier branchement : reprend les réglages actuels de la souris (rien n'est modifié).</summary>
-        static void ImportFromDevice(CorsairMouse d)
+        static void ImportFromDevice(GamingMouse d)
         {
-            int mask = d.ReadStageMask(), cur = d.ReadCurrentStage();
-            if (mask < 0 || cur < 0) return;
+            int cur;
             lock (AppConfig.Sync)
             {
-                for (int i = 0; i < CorsairMouse.StageCount; i++)
+                if (d.ReadStages(dc.Stages, out cur)) dc.CurrentStage = Math.Max(1, Math.Min(CorsairMouse.StageCount - 1, cur));
+                else
                 {
-                    int dpi;
-                    Color led;
-                    if (!d.ReadStage(i, out dpi, out led)) return;
-                    var s = M.Stages[i];
-                    s.Enabled = (mask & (1 << i)) != 0;
-                    if (dpi >= 100) s.Dpi = dpi;
-                    if (led.R + led.G + led.B > 0) s.Color = Theme.ToHex(led);
+                    int dpi = d.ReadDpi();
+                    if (dpi > 0) { dc.Stages[1].Dpi = dpi; dc.Stages[1].Enabled = true; dc.CurrentStage = 1; }
+                    // les souris sans étapes matérielles gardent leur éclairage tant que l'utilisateur n'y touche pas
+                    dc.Effect = "device";
                 }
-                M.CurrentStage = Math.Max(1, Math.Min(CorsairMouse.StageCount - 1, cur));
-                M.Imported = true;
+                foreach (var s in dc.Stages) s.Dpi = Math.Max(d.MinDpi, Math.Min(d.MaxDpi, s.Dpi));
+                dc.Imported = true;
             }
             cfg.Save();
         }
@@ -120,30 +170,19 @@ namespace ControlCenterK
         public static void ApplyDevice()
         {
             var d = dev;
-            if (d == null) return;
-            lock (AppConfig.Sync)
+            var c = dc;
+            if (d == null || c == null) return;
+            List<DpiStage> stages;
+            int cur;
+            bool adv;
+            lock (AppConfig.Sync) { stages = new List<DpiStage>(c.Stages); cur = c.CurrentStage; adv = c.Advanced; }
+            d.ApplyStages(stages, cur);
+            if (d.HasAdvancedMode)
             {
-                int mask = 0;
-                for (int i = 0; i < CorsairMouse.StageCount; i++)
-                {
-                    var s = M.Stages[i];
-                    if (s.Enabled) mask |= 1 << i;
-                    d.SetStage(i, s.Dpi, Theme.FromHex(s.Color, Color.Black));
-                }
-                d.SetStageMask(mask);
-                d.SetCurrentStage(M.CurrentStage);
+                d.SetAdvanced(adv);
+                if (adv) ApplyLighting(); else StopEffect();
             }
-            if (M.Advanced)
-            {
-                d.SetSoftwareMode(true);
-                d.StartButtons();
-                ApplyLighting();
-            }
-            else
-            {
-                StopEffect();
-                d.SetSoftwareMode(false);
-            }
+            else ApplyLighting();
         }
 
         #endregion
@@ -152,29 +191,35 @@ namespace ControlCenterK
 
         public static void SetPollRate(int hz)
         {
-            lock (AppConfig.Sync) M.PollHz = hz;
+            var c = dc;
+            if (c == null) return;
+            lock (AppConfig.Sync) c.PollHz = hz;
             cfg.Save();
             var d = dev;
-            if (d != null) d.SetPollRate(hz); // la souris se reconnecte : OnDeviceChange réappliquera le reste
+            if (d != null && hz > 0) d.SetPollRate(hz); // Corsair : la souris se reconnecte, la détection réappliquera le reste
         }
 
         public static void SetStage(int stage)
         {
-            lock (AppConfig.Sync) M.CurrentStage = stage;
+            var c = dc;
             var d = dev;
-            if (d != null) d.SetCurrentStage(stage);
-            if (M.Advanced) ApplyLighting();
+            if (c == null) return;
+            List<DpiStage> stages;
+            lock (AppConfig.Sync) { c.CurrentStage = stage; stages = new List<DpiStage>(c.Stages); }
+            if (d != null) d.SelectStage(stages, stage);
+            if (d is CorsairMouse && c.Advanced) ApplyLighting();
         }
 
         static void CycleStage(int dir)
         {
-            var d = dev;
+            var c = dc;
+            if (c == null) return;
             int cur;
             List<int> enabled = new List<int>();
             lock (AppConfig.Sync)
             {
-                for (int i = 1; i < CorsairMouse.StageCount; i++) if (M.Stages[i].Enabled) enabled.Add(i);
-                cur = M.CurrentStage;
+                for (int i = 1; i < CorsairMouse.StageCount; i++) if (c.Stages[i].Enabled) enabled.Add(i);
+                cur = c.CurrentStage;
             }
             if (enabled.Count == 0) return;
             int idx = enabled.IndexOf(cur);
@@ -187,45 +232,56 @@ namespace ControlCenterK
 
         #region Éclairage
 
+        static bool LightingActive(GamingMouse d, MouseDeviceConfig c)
+        {
+            return d != null && c != null && d.Zones.Length > 0 && (!d.HasAdvancedMode || c.Advanced);
+        }
+
         public static void ApplyLighting()
         {
             var d = dev;
-            if (d == null || !M.Advanced) return;
+            var c = dc;
+            if (!LightingActive(d, c)) return;
             string fx;
-            lock (AppConfig.Sync) fx = M.Effect;
+            lock (AppConfig.Sync) fx = c.Effect;
             if (fx == "breathe" || fx == "rainbow") StartEffect();
             else
             {
                 StopEffect();
-                d.SetZones(StaticColors(fx == "off" ? 0f : 1f));
+                if (fx != "device") d.SetZones(StaticColors(fx == "off" ? 0f : 1f));
             }
         }
 
         static Color[] StaticColors(float level)
         {
-            var c = new Color[6];
+            var d = dev;
+            var c = dc;
+            int n = d != null ? d.Zones.Length : 0;
+            var col = new Color[n];
+            if (c == null) return col;
             lock (AppConfig.Sync)
             {
-                for (int z = 0; z < 6; z++) c[z] = Theme.FromHex(M.ZoneColors[z], Color.Black);
-                // la zone 3 (indicateur DPI) prend la couleur de l'étape en cours
-                c[2] = Theme.FromHex(M.Stages[Math.Max(0, Math.Min(CorsairMouse.StageCount - 1, M.CurrentStage))].Color, c[2]);
+                for (int z = 0; z < n && z < c.ZoneColors.Count; z++) col[z] = Theme.FromHex(c.ZoneColors[z], Color.Black);
+                // Corsair : la zone 3 (indicateur DPI) prend la couleur de l'étape en cours
+                if (d is CorsairMouse && n > 2)
+                    col[2] = Theme.FromHex(c.Stages[Math.Max(0, Math.Min(CorsairMouse.StageCount - 1, c.CurrentStage))].Color, col[2]);
             }
-            for (int z = 0; z < 6; z++) c[z] = Color.FromArgb((int)(c[z].R * level), (int)(c[z].G * level), (int)(c[z].B * level));
-            return c;
+            for (int z = 0; z < n; z++) col[z] = Color.FromArgb((int)(col[z].R * level), (int)(col[z].G * level), (int)(col[z].B * level));
+            return col;
         }
 
         /// <summary>Fait clignoter une zone en blanc pour l'identifier sur la souris.</summary>
         public static void IdentifyZone(int zone)
         {
             var d = dev;
-            if (d == null || !M.Advanced) return;
+            if (!LightingActive(d, dc)) return;
             StopEffect();
             new Thread(() =>
             {
                 for (int i = 0; i < 6; i++)
                 {
                     var c = StaticColors(0.05f);
-                    c[zone] = i % 2 == 0 ? Color.White : Color.Black;
+                    if (zone < c.Length) c[zone] = i % 2 == 0 ? Color.White : Color.Black;
                     d.SetZones(c);
                     Thread.Sleep(250);
                 }
@@ -237,23 +293,26 @@ namespace ControlCenterK
         {
             if (effectTimer != null) return;
             var t0 = Environment.TickCount;
+            // les souris non-Corsair acceptent moins de commandes par seconde
+            int period = dev is CorsairMouse ? 50 : 150;
             effectTimer = new System.Threading.Timer(_ =>
             {
                 var d = dev;
-                if (d == null) return;
+                var c = dc;
+                if (d == null || c == null) return;
                 string fx;
                 int speed;
-                lock (AppConfig.Sync) { fx = M.Effect; speed = M.EffectSpeed; }
+                lock (AppConfig.Sync) { fx = c.Effect; speed = c.EffectSpeed; }
                 double t = (Environment.TickCount - t0) / 1000.0 * (0.2 + speed * 0.12);
-                Color[] c;
+                Color[] col;
                 if (fx == "rainbow")
                 {
-                    c = new Color[6];
-                    for (int z = 0; z < 6; z++) c[z] = Theme.Hsl((t * 90 + z * 40) % 360, 1, 0.5);
+                    col = new Color[d.Zones.Length];
+                    for (int z = 0; z < col.Length; z++) col[z] = Theme.Hsl((t * 90 + z * 40) % 360, 1, 0.5);
                 }
-                else c = StaticColors((float)(0.08 + 0.92 * (0.5 + 0.5 * Math.Sin(t * Math.PI))));
-                d.SetZones(c);
-            }, null, 0, 50);
+                else col = StaticColors((float)(0.08 + 0.92 * (0.5 + 0.5 * Math.Sin(t * Math.PI))));
+                d.SetZones(col);
+            }, null, 0, period);
         }
 
         static void StopEffect()
@@ -295,7 +354,7 @@ namespace ControlCenterK
             return true;
         }
 
-        static void OnCorsairButton(int bit, bool down)
+        static void OnDeviceButton(int bit, bool down)
         {
             string id = "cor:" + bit;
             var h = ButtonEvent;
@@ -328,9 +387,9 @@ namespace ControlCenterK
                 case "click": { int b; if (int.TryParse(val, out b)) InputSim.MouseButton(b, down); break; }
                 case "dpi_next": if (down) CycleStage(1); break;
                 case "dpi_prev": if (down) CycleStage(-1); break;
-                case "dpi_stage": { int s; if (down && int.TryParse(val, out s)) { SetStage(s); cfg.Save(); } break; }
+                case "dpi_stage": { int s; if (down && int.TryParse(val, out s) && s >= 0 && s < CorsairMouse.StageCount) { SetStage(s); cfg.Save(); } break; }
                 case "sniper":
-                    if (down) { lock (AppConfig.Sync) sniperReturn = M.CurrentStage; SetStage(0); }
+                    if (down) { var c = dc; if (c == null) break; lock (AppConfig.Sync) sniperReturn = c.CurrentStage; SetStage(0); }
                     else if (sniperReturn >= 0) { SetStage(sniperReturn); sniperReturn = -1; }
                     break;
                 case "media_play": if (down) Native.PressKey(0xB3); break;

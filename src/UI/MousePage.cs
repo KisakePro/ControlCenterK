@@ -18,6 +18,8 @@ namespace ControlCenterK
         readonly Dictionary<string, Card> buttonRows = new Dictionary<string, Card>();
 
         MouseConfig M { get { return cfg.Mouse; } }
+        /// <summary>Réglages de la souris pilotée (null si aucune).</summary>
+        MouseDeviceConfig D;
 
         public MousePage(AppConfig cfg)
         {
@@ -55,17 +57,20 @@ namespace ControlCenterK
 
             var title = titleLabel = Theme.Label("Souris", Theme.Semi(18f), Theme.Text, Theme.Bg);
             title.Location = new Point(Theme.S(26), Theme.S(20));
-            var sub = subLabel = Theme.Label("Réglages de votre souris Corsair et réaffectation des boutons (touches, raccourcis, macros).", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
+            var sub = subLabel = Theme.Label("Souris détectées automatiquement : sensibilité, fréquence, éclairage et réaffectation des boutons (touches, raccourcis, macros).", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
             sub.Location = new Point(Theme.S(28), Theme.S(58));
             scroll.Controls.Add(title);
             scroll.Controls.Add(sub);
 
             var dev = MouseModule.Device;
-            cards.Add(DeviceCard(dev));
-            if (dev != null)
+            D = MouseModule.DeviceConfig;
+            if (dev == null) D = null;
+            cards.Add(DetectedCard(dev));
+            if (dev != null && D != null)
             {
-                cards.Add(DpiCard());
-                cards.Add(LightCard());
+                cards.Add(DeviceCard(dev));
+                cards.Add(DpiCard(dev));
+                if (dev.Zones.Length > 0) cards.Add(LightCard(dev));
             }
             cards.Add(ButtonsCard(dev));
             cards.Add(WindowsCard());
@@ -170,47 +175,109 @@ namespace ControlCenterK
 
         #region Cartes
 
-        Card DeviceCard(CorsairMouse dev)
+        Card DetectedCard(GamingMouse dev)
         {
-            if (dev == null)
+            var mice = MouseModule.Detected;
+            if (mice.Count == 0)
             {
-                var none = NewCard("Aucune souris Corsair compatible détectée",
-                    "Souris prise en charge : Corsair Nightsword RGB. Branchez-la : elle est détectée automatiquement. " +
+                var none = NewCard(MouseModule.Scanning ? "Détection des souris…" : "Aucune souris détectée",
+                    "Branchez une souris : elle est détectée automatiquement. Souris réglables : Corsair, Logitech G, Razer et SteelSeries. " +
                     "La réaffectation des boutons standard et les réglages Windows ci-dessous fonctionnent avec toutes les souris.");
                 SetNextY(none, NextY(none));
                 return none;
             }
-            var c = NewCard(dev.Info.Name, "Connectée · firmware v" + dev.Firmware + ". Les réglages sont appliqués en direct, sans modifier la mémoire interne de la souris. " +
-                "Fermez iCUE s'il est lancé : il imposerait ses propres réglages.");
-            var poll = new DropButton { Width = Theme.S(200) };
-            poll.Add("0", "Ne pas modifier");
-            foreach (var hz in new[] { 125, 250, 500, 1000 }) poll.Add(hz.ToString(), hz + " Hz");
-            poll.Value = M.PollHz.ToString();
-            poll.ValueChanged += (s, e) => { int hz = int.Parse(poll.Value); if (hz > 0) MouseModule.SetPollRate(hz); else { lock (AppConfig.Sync) M.PollHz = 0; cfg.Save(); } };
-            Row(c, "Fréquence d'interrogation", "La souris se reconnecte environ 1 s lors du changement.", poll);
-
-            var adv = new Toggle { Checked = M.Advanced };
-            adv.CheckedChanged += (s, e) =>
+            var c = NewCard("Souris détectées", "Les souris réglables sont configurées automatiquement à leur branchement. " +
+                "Les autres profitent de la réaffectation des boutons standard et des réglages Windows.");
+            int y = NextY(c);
+            foreach (var m in mice)
             {
-                lock (AppConfig.Sync) M.Advanced = adv.Checked;
-                cfg.Save();
-                MouseModule.ApplyDevice();
-                Rebuild();
-            };
-            Row(c, "Mode avancé (éclairage et tous les boutons)",
-                "Nécessaire pour l'éclairage et pour réaffecter les boutons DPI, sniper et latéraux. Les clics, la molette et précédent / suivant restent normaux.\n" +
-                "En mode avancé, les boutons DPI et sniper sont gérés par l'application (réglables ci-dessous).", adv);
+                bool active = dev != null && dev.Key == m.Key;
+                var row = new Card { BackColor = active ? Theme.Mix(Theme.Surface, Theme.Accent, 0.18f) : Theme.Surface, Radius = 6,
+                    Bounds = new Rectangle(Theme.S(14), y, Theme.S(870), Theme.S(44)), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                var icon = Theme.Label(Glyphs.Mouse, Theme.Icon(12f), active ? Theme.Accent : Theme.Muted, row.BackColor);
+                icon.Location = new Point(Theme.S(12), Theme.S(13));
+                var name = Theme.Label(m.Name, Theme.Semi(10f), Theme.Text, row.BackColor);
+                name.Location = new Point(Theme.S(42), Theme.S(5));
+                string state = active ? "Pilotée par l'application" + (dev.Experimental ? " · prise en charge expérimentale" : "")
+                             : m.Supported ? "Réglable : cliquez sur « Piloter » pour la configurer"
+                             : "Non réglable : boutons standard et réglages Windows uniquement";
+                var st = Theme.Label(state, Theme.Ui(8.5f), active ? Theme.Green : Theme.Muted, row.BackColor);
+                st.Location = new Point(Theme.S(42), Theme.S(24));
+                row.Controls.AddRange(new Control[] { icon, name, st });
+                if (m.Supported && !active)
+                {
+                    string key = m.Key;
+                    var pick = new FlatButton("Piloter") { Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                    pick.FitWidth();
+                    pick.Location = new Point(row.Width - pick.Width - Theme.S(8), Theme.S(6));
+                    pick.Click += (s, e) => MouseModule.Select(key);
+                    row.Controls.Add(pick);
+                }
+                c.Controls.Add(row);
+                y += Theme.S(50);
+            }
+            SetNextY(c, y);
             return c;
         }
 
-        Card DpiCard()
+        static string VendorApp(string brand)
         {
-            var c = NewCard("Sensibilité (DPI)", "Étapes parcourues avec les boutons DPI. « Sniper » est la sensibilité temporaire du bouton sniper.");
+            switch (brand)
+            {
+                case "Corsair": return "iCUE";
+                case "Logitech": return "G HUB";
+                case "Razer": return "Synapse";
+                case "SteelSeries": return "SteelSeries GG";
+            }
+            return null;
+        }
+
+        Card DeviceCard(GamingMouse dev)
+        {
+            string app = VendorApp(dev.Brand);
+            var c = NewCard(dev.Name,
+                "Connectée" + (dev.Firmware.Length > 0 ? " · firmware v" + dev.Firmware : "") + ". Les réglages sont appliqués en direct, sans modifier la mémoire interne de la souris." +
+                (app != null ? " Fermez " + app + " s'il est lancé : il imposerait ses propres réglages." : "") +
+                (dev.Experimental ? "\nPrise en charge expérimentale : ce modèle n'a pas encore été testé. Si un réglage ne s'applique pas, la souris reste utilisable normalement." : ""));
+            if (dev.PollRates.Length > 0)
+            {
+                var poll = new DropButton { Width = Theme.S(200) };
+                poll.Add("0", "Ne pas modifier");
+                foreach (var hz in dev.PollRates) poll.Add(hz.ToString(), hz + " Hz");
+                poll.Value = D.PollHz.ToString();
+                poll.ValueChanged += (s, e) => { int hz = int.Parse(poll.Value); if (hz > 0) MouseModule.SetPollRate(hz); else { lock (AppConfig.Sync) D.PollHz = 0; cfg.Save(); } };
+                Row(c, "Fréquence d'interrogation", dev is CorsairMouse ? "La souris se reconnecte environ 1 s lors du changement." : null, poll);
+            }
+
+            if (dev.HasAdvancedMode)
+            {
+                var adv = new Toggle { Checked = D.Advanced };
+                adv.CheckedChanged += (s, e) =>
+                {
+                    lock (AppConfig.Sync) D.Advanced = adv.Checked;
+                    cfg.Save();
+                    MouseModule.ApplyDevice();
+                    Rebuild();
+                };
+                Row(c, "Mode avancé (éclairage et tous les boutons)",
+                    "Nécessaire pour l'éclairage et pour réaffecter les boutons DPI, sniper et latéraux. Les clics, la molette et précédent / suivant restent normaux.\n" +
+                    "En mode avancé, les boutons DPI et sniper sont gérés par l'application (réglables ci-dessous).", adv);
+            }
+            else SetNextY(c, NextY(c));
+            return c;
+        }
+
+        Card DpiCard(GamingMouse dev)
+        {
+            var c = NewCard("Sensibilité (DPI)", dev.HardwareStages
+                ? "Étapes parcourues avec les boutons DPI. « Sniper » est la sensibilité temporaire du bouton sniper."
+                : "La souris reçoit la valeur de l'étape active (de " + dev.MinDpi + " à " + dev.MaxDpi + " DPI). « Sniper » : sensibilité temporaire d'un bouton réglé sur « Sniper (maintenir) ».\n" +
+                  "Les boutons DPI de la souris restent gérés par la souris : pour passer d'une étape à l'autre depuis l'application, réglez un bouton sur « DPI : étape suivante ».");
             int y = NextY(c);
             for (int i = 0; i < CorsairMouse.StageCount; i++)
             {
                 int stage = i;
-                var st = M.Stages[i];
+                var st = D.Stages[i];
                 var name = Theme.Label(i == 0 ? "Sniper" : "Étape " + i, Theme.Semi(10f), Theme.Text, Theme.Card);
                 name.Location = new Point(Theme.S(20), y + Theme.S(6));
                 var en = new Toggle { Checked = st.Enabled, Location = new Point(Theme.S(110), y + Theme.S(5)) };
@@ -223,7 +290,8 @@ namespace ControlCenterK
                 {
                     int v;
                     if (!int.TryParse(tb.Text.Trim(), out v)) { tb.Text = st.Dpi.ToString(); return; }
-                    v = Math.Max(100, Math.Min(MouseModule.Device != null ? MouseModule.Device.Info.MaxDpi : 18000, (v + 25) / 50 * 50));
+                    int step = Math.Max(1, dev.DpiStep);
+                    v = Math.Max(dev.MinDpi, Math.Min(dev.MaxDpi, (v + step / 2) / step * step));
                     tb.Text = v.ToString();
                     lock (AppConfig.Sync) st.Dpi = v;
                     cfg.Save();
@@ -231,12 +299,18 @@ namespace ControlCenterK
                 };
                 tb.Leave += (s, e) => commit();
                 tb.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; commit(); } };
-                var col = ColorButton(st.Color, hex => { lock (AppConfig.Sync) st.Color = hex; cfg.Save(); MouseModule.ApplyDevice(); });
-                col.Location = new Point(unit.Right + Theme.S(18), y + Theme.S(1));
-                c.Controls.AddRange(new Control[] { name, en, holder, unit, col });
+                Control col = unit;
+                c.Controls.AddRange(new Control[] { name, en, holder, unit });
+                if (dev.HardwareStages)
+                {
+                    // couleur de l'indicateur DPI de la souris
+                    col = ColorButton(st.Color, hex => { lock (AppConfig.Sync) st.Color = hex; cfg.Save(); MouseModule.ApplyDevice(); });
+                    col.Location = new Point(unit.Right + Theme.S(18), y + Theme.S(1));
+                    c.Controls.Add(col);
+                }
                 if (i > 0)
                 {
-                    bool current = M.CurrentStage == i;
+                    bool current = D.CurrentStage == i;
                     var act = new FlatButton(current ? "Étape active" : "Activer", current);
                     act.FitWidth();
                     act.Location = new Point(col.Right + Theme.S(18), y);
@@ -249,37 +323,45 @@ namespace ControlCenterK
             return c;
         }
 
-        Card LightCard()
+        Card LightCard(GamingMouse dev)
         {
-            if (!M.Advanced)
+            if (dev.HasAdvancedMode && !D.Advanced)
             {
                 var off = NewCard("Éclairage", "Activez le « mode avancé » ci-dessus pour régler l'éclairage : en mode normal, la souris gère elle-même sa lumière.");
                 SetNextY(off, NextY(off));
                 return off;
             }
-            var c = NewCard("Éclairage", "« Identifier » fait clignoter la zone sur la souris : renommez les zones selon ce que vous voyez. La zone 3 suit la couleur de l'étape DPI.");
+            var c = NewCard("Éclairage", "« Identifier » fait clignoter la zone sur la souris : renommez les zones selon ce que vous voyez." +
+                (dev is CorsairMouse ? " La zone 3 suit la couleur de l'étape DPI." : ""));
             var fx = new DropButton { Width = Theme.S(200) };
+            if (!dev.HasAdvancedMode) fx.Add("device", "Géré par la souris");
             fx.Add("static", "Couleurs fixes");
             fx.Add("breathe", "Respiration");
             fx.Add("rainbow", "Arc-en-ciel");
             fx.Add("off", "Éteint");
-            fx.Value = M.Effect;
-            fx.ValueChanged += (s, e) => { lock (AppConfig.Sync) M.Effect = fx.Value; cfg.Save(); MouseModule.ApplyLighting(); };
+            fx.Value = D.Effect;
+            fx.ValueChanged += (s, e) => { lock (AppConfig.Sync) D.Effect = fx.Value; cfg.Save(); MouseModule.ApplyLighting(); };
             Row(c, "Effet", null, fx);
             var speed = new DropButton { Width = Theme.S(200) };
             for (int i = 1; i <= 10; i++) speed.Add(i.ToString(), i == 1 ? "1 (lent)" : i == 10 ? "10 (rapide)" : i.ToString());
-            speed.Value = M.EffectSpeed.ToString();
-            speed.ValueChanged += (s, e) => { lock (AppConfig.Sync) M.EffectSpeed = int.Parse(speed.Value); cfg.Save(); };
+            speed.Value = D.EffectSpeed.ToString();
+            speed.ValueChanged += (s, e) => { lock (AppConfig.Sync) D.EffectSpeed = int.Parse(speed.Value); cfg.Save(); };
             Row(c, "Vitesse de l'effet", null, speed);
 
             int y = NextY(c) + Theme.S(4);
-            for (int z = 0; z < 6; z++)
+            for (int z = 0; z < dev.Zones.Length && z < D.ZoneNames.Count; z++)
             {
                 int zone = z;
                 var holder = new Panel { Location = new Point(Theme.S(20), y) };
-                var tb = DarkText(holder, M.ZoneNames[z], Theme.S(220));
-                tb.Leave += (s, e) => { lock (AppConfig.Sync) M.ZoneNames[zone] = tb.Text.Trim().Length > 0 ? tb.Text.Trim() : "Zone " + (zone + 1); cfg.Save(); };
-                var col = ColorButton(M.ZoneColors[z], hex => { lock (AppConfig.Sync) M.ZoneColors[zone] = hex; cfg.Save(); MouseModule.ApplyLighting(); });
+                var tb = DarkText(holder, D.ZoneNames[z], Theme.S(220));
+                tb.Leave += (s, e) => { lock (AppConfig.Sync) D.ZoneNames[zone] = tb.Text.Trim().Length > 0 ? tb.Text.Trim() : dev.Zones[zone]; cfg.Save(); };
+                var col = ColorButton(D.ZoneColors[z], hex =>
+                {
+                    lock (AppConfig.Sync) { D.ZoneColors[zone] = hex; if (D.Effect == "device") D.Effect = "static"; }
+                    cfg.Save();
+                    MouseModule.ApplyLighting();
+                    if (fx.Value == "device") fx.Value = "static";
+                });
                 col.Location = new Point(holder.Right + Theme.S(12), y + Theme.S(1));
                 var id = new FlatButton("Identifier");
                 id.FitWidth();
@@ -292,12 +374,13 @@ namespace ControlCenterK
             return c;
         }
 
-        Card ButtonsCard(CorsairMouse dev)
+        Card ButtonsCard(GamingMouse dev)
         {
             var c = NewCard("Boutons",
                 "Milieu, précédent et suivant : réaffectés pour toutes les souris. " +
-                (dev != null && M.Advanced ? "Autres boutons (DPI, sniper, latéraux) : utilisez « Détecter un bouton »."
-                                           : "Pour les boutons DPI, sniper et latéraux supplémentaires : activez le mode avancé.") +
+                (dev != null && dev.HasAdvancedMode ? (D.Advanced ? "Autres boutons (DPI, sniper, latéraux) : utilisez « Détecter un bouton »."
+                                                                  : "Pour les boutons DPI, sniper et latéraux supplémentaires : activez le mode avancé.")
+                                                    : "Les autres boutons restent gérés par la souris.") +
                 "\nMacro : étapes séparées par des virgules — ex. « Ctrl+C, 50ms, Ctrl+V » ou « \"bonjour\", Entrée » ; « x3 » répète une étape.");
             detectBtn = new FlatButton("Détecter un bouton", true) { Glyph = Glyphs.Mouse };
             detectBtn.FitWidth();
@@ -465,7 +548,8 @@ namespace ControlCenterK
             {
                 detectBtn.Text = "Détecter un bouton";
                 detectBtn.FitWidth();
-                lastButton.Text = MouseModule.Device != null && !M.Advanced
+                var dv = MouseModule.Device;
+                lastButton.Text = dv != null && dv.HasAdvancedMode && D != null && !D.Advanced
                     ? "Aucun bouton détecté. Les boutons DPI, sniper et latéraux nécessitent le mode avancé."
                     : "Aucun bouton détecté.";
                 lastButton.Left = detectBtn.Right + Theme.S(12);

@@ -8,29 +8,21 @@ using Microsoft.Win32.SafeHandles;
 namespace ControlCenterK
 {
     /// <summary>
-    /// Souris Corsair à protocole « NXP » (testé sur la Nightsword RGB, firmware 3.41).
+    /// Souris Corsair à protocole « NXP » (testé sur la Nightsword RGB, firmware 3.41 ; même protocole pour
+    /// la plupart des souris Corsair filaires : M65, Scimitar, Ironclaw, Harpoon, Glaive, Katar…).
     /// Commandes de 64 octets envoyées en rapport « feature » sur l'interface MI_01 (page 0xFFC2).
     /// Seules des commandes de réglage en direct sont utilisées : rien n'est écrit dans la mémoire interne de la souris.
     /// </summary>
-    sealed class CorsairMouse : IDisposable
+    sealed class CorsairMouse : GamingMouse
     {
-        public sealed class Model
-        {
-            public int Pid;
-            public string Name;
-            public int MaxDpi;
-            public string[] Zones; // nom des zones d'éclairage 1..6
-        }
-
-        public static readonly Model[] Models =
-        {
-            new Model { Pid = 0x1B5C, Name = "Corsair Nightsword RGB", MaxDpi = 18000,
-                Zones = new[] { "Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5", "Zone 6" } },
-        };
+        /// <summary>DPI maximal des modèles vérifiés (les autres : 18000, la souris limite d'elle-même).</summary>
+        static readonly Dictionary<int, int> KnownMaxDpi = new Dictionary<int, int> { { 0x1B5C, 18000 } };
 
         public const int StageCount = 6; // étape 0 = sniper, 1..5 = étapes DPI
 
-        public readonly Model Info;
+        public override bool HardwareStages { get { return true; } }
+        public override bool HasAdvancedMode { get { return true; } }
+
         readonly string ctlPath;
         readonly List<string> inputPaths;
         SafeFileHandle ctl;
@@ -39,35 +31,31 @@ namespace ControlCenterK
         readonly List<SafeFileHandle> inputHandles = new List<SafeFileHandle>();
         volatile bool closing;
 
-        /// <summary>Appui (true) ou relâchement (false) d'un bouton, identifié par son numéro de bit Corsair. Thread de lecture.</summary>
-        public event Action<int, bool> Button;
-
-        public string Firmware { get; private set; }
-
-        CorsairMouse(Model m, string ctlPath, List<string> inputs)
+        CorsairMouse(string ctlPath, List<string> inputs)
         {
-            Info = m;
             this.ctlPath = ctlPath;
             inputPaths = inputs;
         }
 
-        /// <summary>Cherche une souris compatible branchée.</summary>
-        public static CorsairMouse Find()
+        /// <summary>Essaie le protocole Corsair sur les interfaces d'un modèle : la souris doit répondre à l'identification.</summary>
+        public static CorsairMouse Probe(List<HidInfo> group)
         {
-            foreach (var m in Models)
-            {
-                string id = "vid_1b1c&pid_" + m.Pid.ToString("x4");
-                var all = Hid.Paths(id);
-                var ctl = all.Find(p => p.IndexOf("&mi_01", StringComparison.OrdinalIgnoreCase) >= 0);
-                if (ctl == null) continue;
-                var inputs = all.FindAll(p => p.IndexOf("&col03", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                              p.IndexOf("&col04", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                              p.IndexOf("&col05", StringComparison.OrdinalIgnoreCase) >= 0);
-                var dev = new CorsairMouse(m, ctl, inputs);
-                if (dev.Connect()) return dev;
-                dev.Dispose();
-            }
-            return null;
+            var ctl = group.Find(h => h.Interface == 1 && h.UsagePage == 0xFFC2 && h.FeatureLen >= 65)
+                   ?? group.Find(h => h.Interface == 1 && h.FeatureLen == 65);
+            if (ctl == null) return null;
+            var inputs = new List<string>();
+            foreach (var h in group)
+                if (h.Interface == 0 && h.InLen > 0 && h.UsagePage >= 0xFF00) inputs.Add(h.Path); // rapports de boutons (mode logiciel)
+            var dev = new CorsairMouse(ctl.Path, inputs);
+            if (!dev.Connect()) { dev.Dispose(); return null; }
+            int max;
+            dev.MaxDpi = KnownMaxDpi.TryGetValue(ctl.Pid, out max) ? max : 18000;
+            dev.Name = MouseDetect.CleanName(MouseDetect.NameOf(group, "Souris " + ctl.Pid.ToString("X4")), "Corsair");
+            dev.Brand = "Corsair";
+            dev.Experimental = ctl.Pid != 0x1B5C; // protocole vérifié sur la Nightsword
+            dev.PollRates = new[] { 125, 250, 500, 1000 };
+            dev.Zones = new[] { "Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5", "Zone 6" };
+            return dev;
         }
 
         bool Connect()
@@ -111,12 +99,63 @@ namespace ControlCenterK
 
         #endregion
 
+        #region Interface commune
+
+        public override bool SetDpi(int dpi)
+        {
+            // valeur unique : l'étape 1 devient l'étape courante
+            return SetStage(1, dpi, Color.Black) && SetCurrentStage(1);
+        }
+
+        public override void ApplyStages(IList<DpiStage> stages, int current)
+        {
+            int mask = 0;
+            for (int i = 0; i < StageCount && i < stages.Count; i++)
+            {
+                var s = stages[i];
+                if (s.Enabled) mask |= 1 << i;
+                SetStage(i, s.Dpi, Theme.FromHex(s.Color, Color.Black));
+            }
+            SetStageMask(mask);
+            SetCurrentStage(current);
+        }
+
+        public override void SelectStage(IList<DpiStage> stages, int stage) { SetCurrentStage(stage); }
+
+        public override bool ReadStages(IList<DpiStage> stages, out int current)
+        {
+            int mask = ReadStageMask();
+            current = ReadCurrentStage();
+            if (mask < 0 || current < 0) return false;
+            for (int i = 0; i < StageCount && i < stages.Count; i++)
+            {
+                int dpi;
+                Color led;
+                if (!ReadStage(i, out dpi, out led)) return false;
+                var s = stages[i];
+                s.Enabled = (mask & (1 << i)) != 0;
+                if (dpi >= 100) s.Dpi = dpi;
+                if (led.R + led.G + led.B > 0) s.Color = Theme.ToHex(led);
+            }
+            return true;
+        }
+
+        public override bool Alive() { return ReadCurrentStage() >= 0; }
+
+        public override void SetAdvanced(bool on)
+        {
+            SetSoftwareMode(on);
+            if (on) StartButtons();
+        }
+
+        #endregion
+
         #region Réglages
 
         /// <summary>Valeur et couleur d'indicateur d'une étape DPI (0 = sniper).</summary>
         public bool SetStage(int stage, int dpi, Color led)
         {
-            dpi = Math.Max(100, Math.Min(Info.MaxDpi, dpi));
+            dpi = Clamp(dpi, 100, MaxDpi);
             return Send(0x07, 0x13, (byte)(0xD0 | stage), 0x00, 0x00,
                 (byte)(dpi & 0xFF), (byte)(dpi >> 8), (byte)(dpi & 0xFF), (byte)(dpi >> 8),
                 led.R, led.G, led.B);
@@ -152,7 +191,7 @@ namespace ControlCenterK
         }
 
         /// <summary>Fréquence d'interrogation (125, 250, 500 ou 1000 Hz). La souris se reconnecte (~1 s).</summary>
-        public bool SetPollRate(int hz)
+        public override bool SetPollRate(int hz)
         {
             int ms = hz >= 1000 ? 1 : hz >= 500 ? 2 : hz >= 250 ? 4 : 8;
             return Send(0x07, 0x0a, 0x00, 0x00, (byte)ms);
@@ -174,7 +213,7 @@ namespace ControlCenterK
         }
 
         /// <summary>Couleurs des 6 zones d'éclairage (mode logiciel requis).</summary>
-        public bool SetZones(Color[] zones)
+        public override bool SetZones(Color[] zones)
         {
             var p = new byte[4 + 6 * 4];
             p[0] = 0x07; p[1] = 0x22; p[2] = 6; p[3] = 0x01;
@@ -194,7 +233,7 @@ namespace ControlCenterK
         #region Boutons (mode logiciel)
 
         /// <summary>Démarre la lecture des événements de boutons Corsair (un thread bloqué en lecture, 0 % CPU au repos).</summary>
-        public void StartButtons()
+        public override void StartButtons()
         {
             if (readers.Count > 0) return;
             foreach (var path in inputPaths)
@@ -223,10 +262,9 @@ namespace ControlCenterK
                     for (int i = 1; i < Math.Min(n, 9); i++) mask |= (ulong)buf[i] << (8 * (i - 1));
                     ulong changed = mask ^ last;
                     last = mask;
-                    var h = Button;
-                    if (h == null || changed == 0) continue;
+                    if (changed == 0) continue;
                     for (int bit = 0; bit < 64; bit++)
-                        if ((changed & (1UL << bit)) != 0) h(bit, (mask & (1UL << bit)) != 0);
+                        if ((changed & (1UL << bit)) != 0) RaiseButton(bit, (mask & (1UL << bit)) != 0);
                 }
             }
             catch { }
@@ -234,10 +272,10 @@ namespace ControlCenterK
 
         #endregion
 
-        public void Dispose()
+        public override void Dispose()
         {
             closing = true;
-            foreach (var h in inputHandles) try { h.Dispose(); } catch { }
+            foreach (var h in inputHandles) try { Hid.CancelIoEx(h, IntPtr.Zero); h.Dispose(); } catch { }
             inputHandles.Clear();
             lock (io) { if (ctl != null) ctl.Dispose(); ctl = null; }
         }

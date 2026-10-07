@@ -7,8 +7,10 @@ Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 - Nouvelle numérotation des versions : 0.3.
 - Barre latérale en sections : profil actif sous le nom de l'application, section « Audio »
   (Contrôleur, Routage, Périphériques audio) et section « Périphériques » (Souris, Clavier).
-- Module « Souris » : Corsair Nightsword RGB (DPI, fréquence, éclairage, boutons, macros),
-  avec un bouton « Détecter un bouton ».
+- Module « Souris » : détection automatique des souris branchées. Réglages (DPI, fréquence, éclairage)
+  pour les souris Corsair, Logitech G (HID++), Razer et SteelSeries ; testé sur la Corsair Nightsword RGB,
+  les autres modèles sont signalés « expérimental ». Réglages enregistrés séparément pour chaque modèle.
+  Boutons réaffectables (touches, macros, DPI, média) avec un bouton « Détecter un bouton ».
 - Module « Clavier » (page en construction).
 - Prise en charge de plusieurs contrôleurs MIDI.
 - Paramètres regroupés par catégorie : Général, Apparence, Contrôleur MIDI, Dossier de configuration.
