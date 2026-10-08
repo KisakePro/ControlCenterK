@@ -22,7 +22,10 @@ namespace ControlCenterK
         static volatile bool scanning;
         static bool probed;
         static readonly Dictionary<int, int> pressedAt = new Dictionary<int, int>(); // effet réactif : code HID → instant d'appui
-        static readonly HashSet<int> swallowed = new HashSet<int>();                // touches dont on absorbe l'appui en cours
+        static readonly Dictionary<int, string> swallowed = new Dictionary<int, string>(); // touche dont l'appui est absorbé → macro déclenchée
+        static readonly HashSet<int> modsHeld = new HashSet<int>();                 // modificateurs tenus (codes HID)
+        static readonly HashSet<int> detectModRepeat = new HashSet<int>();
+        static int detectMod = -1;
 
         public static bool Running { get; private set; }
         public static RgbKeyboard Device { get { return dev; } }
@@ -281,8 +284,39 @@ namespace ControlCenterK
             UpdateHook();
         }
 
+        static int CurrentMods()
+        {
+            int m = 0;
+            lock (modsHeld) foreach (int u in modsHeld) m |= KeyLayout.ModBit(u);
+            return m;
+        }
+
+        static void ReleaseMods()
+        {
+            List<int> held;
+            lock (modsHeld) held = new List<int>(modsHeld);
+            foreach (int u in held)
+            {
+                System.Windows.Forms.Keys k;
+                switch (u)
+                {
+                    case 0xE0: k = System.Windows.Forms.Keys.LControlKey; break;
+                    case 0xE1: k = System.Windows.Forms.Keys.LShiftKey; break;
+                    case 0xE2: k = System.Windows.Forms.Keys.LMenu; break;
+                    case 0xE3: k = System.Windows.Forms.Keys.LWin; break;
+                    case 0xE4: k = System.Windows.Forms.Keys.RControlKey; break;
+                    case 0xE5: k = System.Windows.Forms.Keys.RShiftKey; break;
+                    case 0xE6: k = System.Windows.Forms.Keys.RMenu; break;
+                    default: k = System.Windows.Forms.Keys.RWin; break;
+                }
+                InputSim.Key(k, false);
+            }
+        }
+
         public static void CancelDetect()
         {
+            detectMod = -1;
+            detectModRepeat.Clear();
             detect = null;
             UpdateHook();
         }
@@ -364,33 +398,89 @@ namespace ControlCenterK
                         var kp = KeyPressed;
                         if (kp != null) kp(id);
                     }
-                    // détection : la touche est prise, ni tapée ni exécutée
+                    int bit = KeyLayout.ModBit(u);
+                    if (bit != 0)
+                        lock (modsHeld) { if (down) modsHeld.Add(u); else modsHeld.Remove(u); }
+                    int mods = CurrentMods() & ~bit;
+                    // détection : la touche (ou la combinaison) est prise, ni tapée ni exécutée.
+                    // Un modificateur seul n'est retenu qu'à son relâchement sans autre touche entre-temps.
                     var d = detect;
-                    if (down && d != null)
+                    if (d != null)
                     {
-                        detect = null;
-                        detectedUsage = u;
-                        ThreadPool.QueueUserWorkItem(_ => d(id));
-                        return new IntPtr(1);
+                        if (bit != 0)
+                        {
+                            if (down && detectModRepeat.Add(u)) detectMod = u;
+                            if (up)
+                            {
+                                detectModRepeat.Remove(u);
+                                if (detectMod == u)
+                                {
+                                    detect = null;
+                                    detectMod = -1;
+                                    ThreadPool.QueueUserWorkItem(_ => d(id));
+                                }
+                            }
+                            return CallNextHookEx(hook, code, wParam, lParam);
+                        }
+                        if (down)
+                        {
+                            detect = null;
+                            detectMod = -1;
+                            detectModRepeat.Clear();
+                            detectedUsage = u;
+                            string full = KeyLayout.ComboId(u, mods);
+                            ThreadPool.QueueUserWorkItem(_ => d(full));
+                            return new IntPtr(1);
+                        }
                     }
                     if (u == detectedUsage)
                     {
                         if (up) detectedUsage = -1;
                         return new IntPtr(1);
                     }
-                    // macro : l'appui d'origine est remplacé par l'action (répétitions automatiques ignorées)
+                    // macro : l'appui d'origine est remplacé par l'action (répétitions automatiques ignorées).
+                    // Une combinaison (ex. Ctrl+A) passe avant la touche seule.
+                    string fid = null;
                     MouseAction a = null;
-                    if (cfg != null) lock (AppConfig.Sync) K.Macros.TryGetValue(id, out a);
-                    if (a != null && !string.IsNullOrEmpty(a.Kind))
+                    if (down)
                     {
-                        bool first;
-                        lock (swallowed) first = down ? swallowed.Add(u) : swallowed.Remove(u);
-                        if (first)
+                        lock (swallowed) if (swallowed.ContainsKey(u)) return new IntPtr(1); // répétition automatique
+                        if (cfg != null)
+                            lock (AppConfig.Sync)
+                            {
+                                string combo = KeyLayout.ComboId(u, mods);
+                                if (mods != 0 && K.Macros.TryGetValue(combo, out a) && !string.IsNullOrEmpty(a.Kind)) fid = combo;
+                                else if (K.Macros.TryGetValue(id, out a) && !string.IsNullOrEmpty(a.Kind)) fid = id;
+                            }
+                        if (fid != null)
                         {
-                            bool cd = down;
-                            ThreadPool.QueueUserWorkItem(_ => InputActions.Run(id, a, cd));
+                            lock (swallowed) swallowed[u] = fid;
+                            var act = a;
+                            string fired = fid;
+                            bool combo = KeyLayout.ModsOf(fid) != 0;
+                            ThreadPool.QueueUserWorkItem(_ =>
+                            {
+                                // combinaison : les modificateurs tenus sont relâchés pour ne pas se mêler à l'action
+                                if (combo) ReleaseMods();
+                                InputActions.Run(fired, act, true);
+                            });
+                            return new IntPtr(1);
                         }
-                        return new IntPtr(1);
+                    }
+                    else
+                    {
+                        lock (swallowed) if (swallowed.TryGetValue(u, out fid)) swallowed.Remove(u);
+                        if (fid != null)
+                        {
+                            if (cfg != null) lock (AppConfig.Sync) K.Macros.TryGetValue(fid, out a);
+                            if (a != null)
+                            {
+                                var act = a;
+                                string fired = fid;
+                                ThreadPool.QueueUserWorkItem(_ => InputActions.Run(fired, act, false));
+                            }
+                            return new IntPtr(1);
+                        }
                     }
                 }
             }
