@@ -2,6 +2,12 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.5.3] - 2026-10-08
+
+- Macros clavier : une combinaison peut servir de déclencheur (ex. Ctrl+A, Ctrl+Maj+F1). « Ajouter une touche » attend
+  la touche après les modificateurs ; un modificateur seul (Ctrl…) est retenu à son relâchement. Une combinaison passe
+  avant la touche seule, et les modificateurs tenus sont relâchés avant l'action.
+
 ## [0.5.2] - 2026-10-08
 
 - Macros clavier : les touches sont de nouveau reconnues (claviers SteelSeries notamment). Le crochet clavier

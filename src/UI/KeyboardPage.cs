@@ -361,14 +361,14 @@ namespace ControlCenterK
             detectBtn.FitWidth();
             detectBtn.Location = new Point(Theme.S(20), NextY(c));
             detectBtn.Click += (s, e) => { if (detecting) StopDetect(null); else StartDetect(); };
-            detectInfo = Theme.Label("Cliquez puis appuyez sur la touche à réaffecter.", Theme.Ui(9f), Theme.Muted, Theme.Card);
+            detectInfo = Theme.Label("Cliquez puis appuyez sur la touche ou la combinaison à réaffecter (ex. Ctrl+A).", Theme.Ui(9f), Theme.Muted, Theme.Card);
             detectInfo.Location = new Point(detectBtn.Right + Theme.S(12), detectBtn.Top + (detectBtn.Height - detectInfo.Height) / 2);
             c.Controls.Add(detectBtn);
             c.Controls.Add(detectInfo);
             SetNextY(c, detectBtn.Bottom + Theme.S(12));
             List<string> ids;
             lock (AppConfig.Sync) ids = new List<string>(K.Macros.Keys);
-            ids.Sort((a, b) => KeyLayout.UsageOf(a).CompareTo(KeyLayout.UsageOf(b)));
+            ids.Sort((a, b) => { int r = KeyLayout.UsageOf(a).CompareTo(KeyLayout.UsageOf(b)); return r != 0 ? r : KeyLayout.ModsOf(a).CompareTo(KeyLayout.ModsOf(b)); });
             foreach (var id in ids) AddMacroRow(c, id);
             return c;
         }
@@ -379,7 +379,7 @@ namespace ControlCenterK
             lock (AppConfig.Sync) if (!K.Macros.TryGetValue(id, out a)) return;
             int y = NextY(c);
             var row = new Card { BackColor = Theme.Surface, Radius = 6, Bounds = new Rectangle(Theme.S(14), y, Theme.S(870), Theme.S(44)), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            var name = Theme.Label(KeyLayout.NameOf(KeyLayout.UsageOf(id)), Theme.Semi(10f), Theme.Text, Theme.Surface);
+            var name = Theme.Label(KeyLayout.NameOfId(id), Theme.Semi(10f), Theme.Text, Theme.Surface);
             name.AutoSize = false;
             name.Bounds = new Rectangle(Theme.S(12), Theme.S(12), Theme.S(150), Theme.S(22));
 
@@ -482,7 +482,7 @@ namespace ControlCenterK
         void StartDetect()
         {
             detecting = true;
-            detectBtn.Text = "Appuyez sur une touche…  (Annuler)";
+            detectBtn.Text = "Appuyez sur une touche ou une combinaison…  (Annuler)";
             detectBtn.FitWidth();
             detectInfo.Visible = false;
             KeyboardModule.BeginDetect(id => Ui(() => StopDetect(id)));
@@ -509,9 +509,9 @@ namespace ControlCenterK
             }
             bool isNew = false;
             lock (AppConfig.Sync)
-                if (!K.Macros.ContainsKey(id)) { K.Macros[id] = new MouseAction { Name = KeyLayout.NameOf(KeyLayout.UsageOf(id)) }; isNew = true; }
+                if (!K.Macros.ContainsKey(id)) { K.Macros[id] = new MouseAction { Name = KeyLayout.NameOfId(id) }; isNew = true; }
             if (isNew) { cfg.Save(); Rebuild(); }
-            string name = KeyLayout.NameOf(KeyLayout.UsageOf(id));
+            string name = KeyLayout.NameOfId(id);
             detectInfo.Text = "✓ " + name + (isNew ? " ajoutée : choisissez son action" : " : déjà dans la liste");
             detectInfo.ForeColor = Theme.Green;
             detectInfo.Left = detectBtn.Right + Theme.S(12);

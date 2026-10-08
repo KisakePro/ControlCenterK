@@ -138,11 +138,50 @@ namespace ControlCenterK
             return l.Length > 0 ? "Touche " + l : "Touche " + usage.ToString("X2");
         }
 
-        /// <summary>Usage HID depuis un identifiant "key:xx".</summary>
+        /// <summary>Usage HID depuis un identifiant "key:xx" ou "key:xx:m" (combinaison).</summary>
         public static int UsageOf(string id)
         {
             int u;
-            return id != null && id.StartsWith("key:") && int.TryParse(id.Substring(4), System.Globalization.NumberStyles.HexNumber, null, out u) ? u : -1;
+            if (id == null || !id.StartsWith("key:")) return -1;
+            string h = id.Substring(4);
+            int c = h.IndexOf(':');
+            if (c >= 0) h = h.Substring(0, c);
+            return int.TryParse(h, System.Globalization.NumberStyles.HexNumber, null, out u) ? u : -1;
+        }
+
+        /// <summary>Modificateurs d'une combinaison "key:xx:m" : 1 Ctrl, 2 Maj, 4 Alt, 8 Win (0 = touche seule).</summary>
+        public static int ModsOf(string id)
+        {
+            int m, c = id == null || id.Length < 5 ? -1 : id.IndexOf(':', 4);
+            return c > 0 && int.TryParse(id.Substring(c + 1), System.Globalization.NumberStyles.HexNumber, null, out m) ? m : 0;
+        }
+
+        /// <summary>Bit de modificateur d'une touche (0 si ce n'en est pas un).</summary>
+        public static int ModBit(int usage)
+        {
+            switch (usage)
+            {
+                case 0xE0: case 0xE4: return 1;
+                case 0xE1: case 0xE5: return 2;
+                case 0xE2: case 0xE6: return 4;
+                case 0xE3: case 0xE7: return 8;
+            }
+            return 0;
+        }
+
+        public static string ComboId(int usage, int mods)
+        {
+            return "key:" + usage.ToString("x2") + (mods != 0 ? ":" + mods.ToString("x") : "");
+        }
+
+        /// <summary>Nom affiché d'une touche ou d'une combinaison (ex. « Touche Ctrl+A »).</summary>
+        public static string NameOfId(string id)
+        {
+            int u = UsageOf(id), m = ModsOf(id);
+            string n = NameOf(u);
+            if (m == 0) return n;
+            string p = ((m & 1) != 0 ? "Ctrl+" : "") + ((m & 2) != 0 ? "Maj+" : "") + ((m & 4) != 0 ? "Alt+" : "") + ((m & 8) != 0 ? "Win+" : "");
+            return "Touche " + p + (n.StartsWith("Touche ") ? n.Substring(7) : n);
         }
     }
 }
