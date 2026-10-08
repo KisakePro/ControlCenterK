@@ -10,8 +10,13 @@ namespace ControlCenterK
         public string Name { get; set; }    // nom donné au bouton par l'utilisateur
         public string Kind { get; set; }    // "", keys, macro, click, dpi_next, dpi_prev, dpi_stage, sniper, media_*, profile_*
         public string Value { get; set; }   // raccourci, macro, numéro de bouton / d'étape…
+        /// <summary>Raccourci / macro : "pulse" = une seule fois à l'appui, "hold" = continu (maintenu ou rejoué tant que la touche est enfoncée).</summary>
+        public string Mode { get; set; }
 
-        public MouseAction() { Name = ""; Kind = ""; Value = ""; }
+        public MouseAction() { Name = ""; Kind = ""; Value = ""; Mode = ""; }
+
+        /// <summary>Par défaut : raccourci continu (maintenu), macro en impulsion.</summary>
+        public bool Pulse { get { return Mode == "pulse" || (string.IsNullOrEmpty(Mode) && Kind == "macro"); } }
     }
 
     public class DpiStage

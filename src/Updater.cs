@@ -27,10 +27,12 @@ namespace ControlCenterK
     /// </summary>
     public static class Updater
     {
-        static string ApiLatest { get { return "https://api.github.com/repos/" + AppVersion.Repo + "/releases/latest"; } }
+        static string ApiReleases { get { return "https://api.github.com/repos/" + AppVersion.Repo + "/releases?per_page=30"; } }
 
         /// <summary>Résultat du dernier contrôle (null si aucune version plus récente).</summary>
         public static volatile UpdateInfo Available;
+        /// <summary>Toutes les versions publiées, de la plus récente à la plus ancienne (vide tant que rien n'a été vérifié).</summary>
+        public static volatile List<UpdateInfo> Releases = new List<UpdateInfo>();
         public static event Action Changed;
 
         static WebClient Client()
@@ -62,12 +64,25 @@ namespace ControlCenterK
             return r;
         }
 
-        /// <summary>Interroge GitHub. Renvoie la dernière version publiée (même si elle n'est pas plus récente).</summary>
-        public static UpdateInfo FetchLatest()
+        /// <summary>Interroge GitHub : toutes les versions publiées (hors brouillons), de la plus récente à la plus ancienne.</summary>
+        public static List<UpdateInfo> FetchAll()
         {
             string json;
-            using (var wc = Client()) json = wc.DownloadString(ApiLatest);
-            var rel = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+            using (var wc = Client()) json = wc.DownloadString(ApiReleases);
+            var list = new List<UpdateInfo>();
+            var rels = new JavaScriptSerializer() { MaxJsonLength = int.MaxValue }.Deserialize<ArrayList>(json);
+            foreach (Dictionary<string, object> rel in rels)
+            {
+                if (rel.ContainsKey("draft") && true.Equals(rel["draft"])) continue;
+                var info = Parse(rel);
+                if (info.SetupUrl != null) list.Add(info);
+            }
+            list.Sort((a, b) => Compare(b.Version, a.Version));
+            return list;
+        }
+
+        static UpdateInfo Parse(Dictionary<string, object> rel)
+        {
             var info = new UpdateInfo
             {
                 Version = ((rel["tag_name"] as string) ?? "").TrimStart('v', 'V'),
@@ -106,7 +121,13 @@ namespace ControlCenterK
             {
                 UpdateInfo latest = null;
                 string error = null;
-                try { latest = FetchLatest(); }
+                try
+                {
+                    var all = FetchAll();
+                    Releases = all;
+                    if (all.Count > 0) latest = all[0];
+                    else error = "Aucune version publiée pour l'instant.";
+                }
                 catch (WebException e)
                 {
                     var r = e.Response as HttpWebResponse;

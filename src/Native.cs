@@ -11,6 +11,10 @@ namespace ControlCenterK
         public const uint CALLBACK_FUNCTION = 0x30000;
         public const int WM_DEVICECHANGE = 0x0219;
 
+        [DllImport("user32.dll")] static extern short GetKeyState(int vk);
+        /// <summary>Touche Windows enfoncée (non signalée par Control.ModifierKeys).</summary>
+        public static bool WinDown() { return GetKeyState(0x5B) < 0 || GetKeyState(0x5C) < 0; }
+
         public delegate void MidiInProc(IntPtr hMidiIn, int wMsg, IntPtr dwInstance, IntPtr dwParam1, IntPtr dwParam2);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

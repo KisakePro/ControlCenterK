@@ -177,11 +177,20 @@ namespace ControlCenterK
         }
 
         /// <summary>Exécute une macro dans un thread à part (n'immobilise ni la souris ni l'interface).</summary>
-        public static void RunMacro(string macro)
+        public static void RunMacro(string macro) { RunMacro(macro, null); }
+
+        /// <summary>Exécute une macro ; si "again" est fourni, la rejoue tant qu'il renvoie vrai (mode continu).</summary>
+        public static void RunMacro(string macro, Func<bool> again)
         {
             var steps = Steps(macro);
             new Thread(() =>
             {
+                do RunSteps(steps); while (again != null && again());
+            }) { IsBackground = true, Name = "Macro" }.Start();
+        }
+
+        static void RunSteps(List<string> steps)
+        {
                 foreach (var step in steps)
                 {
                     string s = step;
@@ -199,7 +208,6 @@ namespace ControlCenterK
                         if (ms < 0) Thread.Sleep(15);
                     }
                 }
-            }) { IsBackground = true, Name = "Macro" }.Start();
         }
 
         #endregion
@@ -220,7 +228,9 @@ namespace ControlCenterK
                     {
                         var keys = InputSim.ParseCombo(val);
                         if (keys == null) return true;
-                        // maintenu tant que le bouton est maintenu (utile en jeu, push-to-talk…)
+                        // impulsion : la combinaison est envoyée une fois à l'appui
+                        if (a.Pulse) { if (down) InputSim.PressCombo(keys); return true; }
+                        // continu : maintenu tant que le bouton est maintenu (utile en jeu, push-to-talk…)
                         lock (held)
                         {
                             if (down && held.Add(id)) foreach (var k in keys) InputSim.Key(k, true);
@@ -228,7 +238,15 @@ namespace ControlCenterK
                         }
                         return true;
                     }
-                case "macro": if (down) InputSim.RunMacro(val); return true;
+                case "macro":
+                    if (a.Pulse) { if (down) InputSim.RunMacro(val); return true; }
+                    // continu : la macro est rejouée tant que la touche / le bouton reste enfoncé
+                    lock (held)
+                    {
+                        if (down && held.Add(id)) InputSim.RunMacro(val, () => { lock (held) return held.Contains(id); });
+                        else if (!down) held.Remove(id);
+                    }
+                    return true;
                 case "click": { int b; if (int.TryParse(val, out b)) InputSim.MouseButton(b, down); return true; }
                 case "media_play": if (down) Native.PressKey(0xB3); return true;
                 case "media_next": if (down) Native.PressKey(0xB0); return true;
