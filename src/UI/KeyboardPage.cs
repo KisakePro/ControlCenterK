@@ -83,6 +83,8 @@ namespace ControlCenterK
             var dev = KeyboardModule.Device;
             D = dev != null ? KeyboardModule.DeviceConfig : null;
             cards.Add(DetectedCard(dev));
+            var saved = SavedCard();
+            if (saved != null) cards.Add(saved);
             if (dev != null && D != null) cards.Add(LightCard(dev));
             cards.Add(MacroCard());
             foreach (var c in cards) scroll.Controls.Add(c);
@@ -162,6 +164,31 @@ namespace ControlCenterK
         #endregion
 
         #region Cartes
+
+        Card SavedCard()
+        {
+            var connected = new HashSet<string>();
+            foreach (var m in KeyboardModule.Detected) connected.Add(m.Key);
+            var items = new List<KeyValuePair<string, string>>();
+            lock (AppConfig.Sync)
+                foreach (var kv in K.Devices)
+                    if (!connected.Contains(kv.Key))
+                        items.Add(new KeyValuePair<string, string>(kv.Key, kv.Value == null || string.IsNullOrEmpty(kv.Value.Name) ? "Clavier " + kv.Key : kv.Value.Name));
+            if (items.Count == 0) return null;
+            var c = NewCard("Claviers enregistrés non connectés", "Réglages conservés pour des claviers débranchés. Supprimez ceux dont vous n'avez plus besoin.");
+            int y = SavedDevices.Fill(c, NextY(c), items, Glyphs.Keyboard, "clavier", key =>
+            {
+                lock (AppConfig.Sync)
+                {
+                    K.Devices.Remove(key);
+                    if (K.Selected == key) K.Selected = null;
+                }
+                cfg.Save();
+                Rebuild();
+            });
+            SetNextY(c, y);
+            return c;
+        }
 
         Card DetectedCard(RgbKeyboard dev)
         {

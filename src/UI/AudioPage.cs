@@ -14,6 +14,9 @@ namespace ControlCenterK
         readonly FlatButton btnRefresh;
         readonly Panel list;
         readonly List<Control> rows = new List<Control>();
+        // entrées à gauche, sorties à droite, applications en dessous sur toute la largeur
+        readonly List<Control> colIn = new List<Control>(), colOut = new List<Control>(), colApps = new List<Control>();
+        List<Control> cur;
 
         public AudioPage(Engine engine)
         {
@@ -73,12 +76,16 @@ namespace ControlCenterK
             list.SuspendLayout();
             foreach (var r in rows) r.Dispose();
             rows.Clear();
+            colIn.Clear(); colOut.Clear(); colApps.Clear();
             list.AutoScrollPosition = Point.Empty;
 
-            Section("SORTIES AUDIO", outs.Count);
-            foreach (var d in outs) Row("dev:" + d.Id, Glyphs.Speaker, d.Name, d.IsDefault ? "Périphérique par défaut" : "Sortie");
+            cur = colIn;
             Section("ENTRÉES AUDIO", ins.Count);
             foreach (var d in ins) Row("dev:" + d.Id, Glyphs.Mic, d.Name, d.IsDefault ? "Périphérique par défaut" : "Entrée");
+            cur = colOut;
+            Section("SORTIES AUDIO", outs.Count);
+            foreach (var d in outs) Row("dev:" + d.Id, Glyphs.Speaker, d.Name, d.IsDefault ? "Périphérique par défaut" : "Sortie");
+            cur = colApps;
             Section("APPLICATIONS", apps.Count);
             foreach (var a in apps) Row("app:" + a.Proc, Glyphs.App, a.Name, a.Proc + ".exe" + (a.Playing ? "  ·  session audio active" : ""));
 
@@ -91,6 +98,7 @@ namespace ControlCenterK
             var l = Theme.Label(text + "  (" + count + ")", Theme.Ui(8f, FontStyle.Bold), Theme.Dim, Theme.Bg);
             l.Tag = "section";
             rows.Add(l);
+            cur.Add(l);
             list.Controls.Add(l);
         }
 
@@ -145,6 +153,9 @@ namespace ControlCenterK
             card.Resize += (s, e) =>
             {
                 int right = card.Width - Theme.S(16);
+                // colonne étroite : champ de nom plus court
+                aliasBox.Width = card.Width < Theme.S(620) ? Theme.S(150) : Theme.S(230);
+                tb.Width = aliasBox.Width - Theme.S(20);
                 toggle.Location = new Point(right - toggle.Width, (card.Height - toggle.Height) / 2);
                 lVis.Location = new Point(toggle.Left - lVis.Width - Theme.S(8), (card.Height - lVis.Height) / 2);
                 aliasBox.Location = new Point(lVis.Left - Theme.S(24) - aliasBox.Width, (card.Height - aliasBox.Height) / 2);
@@ -152,27 +163,42 @@ namespace ControlCenterK
                 lName.Size = new Size(Math.Max(Theme.S(60), aliasBox.Left - lName.Left - Theme.S(12)), Theme.S(22));
             };
             rows.Add(card);
+            cur.Add(card);
             list.Controls.Add(card);
         }
 
         void LayoutRows()
         {
-            int y = 0, w = list.Width - SystemInformation.VerticalScrollBarWidth - Theme.S(8);
+            int w = list.Width - SystemInformation.VerticalScrollBarWidth - Theme.S(8);
             int scroll = list.AutoScrollPosition.Y;
-            foreach (var r in rows)
+            int bottom;
+            if (w >= Theme.S(760))
+            {
+                int gap = Theme.S(16), half = (w - gap) / 2;
+                bottom = Math.Max(Place(colIn, 0, 0, half, scroll), Place(colOut, half + gap, 0, half, scroll));
+            }
+            else bottom = Place(colOut, 0, Place(colIn, 0, 0, w, scroll), w, scroll); // fenêtre étroite : une seule colonne
+            Place(colApps, 0, bottom, w, scroll);
+        }
+
+        /// <summary>Empile une colonne (titres de section + lignes) à partir de y ; renvoie le y suivant.</summary>
+        static int Place(List<Control> col, int x, int y, int w, int scroll)
+        {
+            foreach (var r in col)
             {
                 if ("section".Equals(r.Tag))
                 {
                     y += y == 0 ? 0 : Theme.S(14);
-                    r.Location = new Point(Theme.S(2), y + scroll);
+                    r.Location = new Point(x + Theme.S(2), y + scroll);
                     y += r.Height + Theme.S(6);
                 }
                 else
                 {
-                    r.SetBounds(0, y + scroll, w, r.Height);
+                    r.SetBounds(x, y + scroll, w, r.Height);
                     y += r.Height + Theme.S(6);
                 }
             }
+            return y;
         }
     }
 }

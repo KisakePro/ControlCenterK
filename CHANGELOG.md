@@ -2,6 +2,14 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.5.4] - 2026-10-08
+
+- Souris et clavier : les périphériques enregistrés mais débranchés sont listés et peuvent être supprimés (avec confirmation).
+- Souris : seuls les boutons présents sont listés. Précédent / suivant et molette inclinée s'ajoutent avec « Détecter un bouton ».
+- Clavier SteelSeries Apex M750 ISO (AZERTY…) : la touche « < » et la touche Menu sont éclairables, et la rangée Maj est
+  correctement alignée.
+- Périphériques audio : entrées à gauche, sorties à droite, applications en dessous.
+
 ## [0.5.3] - 2026-10-08
 
 - Macros clavier : une combinaison peut servir de déclencheur (ex. Ctrl+A, Ctrl+Maj+F1). « Ajouter une touche » attend
