@@ -14,16 +14,37 @@ namespace ControlCenterK
     {
         enum Proto { ApexM, Gen1, Gen2, Gen3 }
 
-        // Apex M750 : position dans la grille (rangée du bas en premier) → code HID (0 : pas de touche, 0x100 : Fn)
+        // Apex M750 (ANSI / US) : position dans la grille (rangée du bas en premier) → code HID (0 : pas de touche).
+        // La case 11 de la rangée du bas est Fn sur les modèles US, Menu sur les modèles ISO : elle suit la touche Menu.
         static readonly int[] M750Grid =
         {
-            0xE0, 0xE3, 0xE2, 0, 0x2C, 0, 0, 0, 0, 0xE6, 0xE7, 0x100, 0xE4, 0, 0, 0x50, 0x51, 0x4F, 0, 0x62, 0, 0x63,
+            0xE0, 0xE3, 0xE2, 0, 0x2C, 0, 0, 0, 0, 0xE6, 0xE7, 0x65, 0xE4, 0, 0, 0x50, 0x51, 0x4F, 0, 0x62, 0, 0x63,
             0xE1, 0x1D, 0x1B, 0x06, 0x19, 0x05, 0x11, 0x10, 0x36, 0x37, 0x38, 0, 0xE5, 0, 0, 0, 0x52, 0, 0x59, 0x5A, 0x5B, 0x58,
             0x39, 0x04, 0x16, 0x07, 0x09, 0x0A, 0x0B, 0x0D, 0x0E, 0x0F, 0x33, 0x34, 0x32, 0x28, 0, 0, 0, 0, 0x5C, 0x5D, 0x5E, 0,
             0x2B, 0x14, 0x1A, 0x08, 0x15, 0x17, 0x1C, 0x18, 0x0C, 0x12, 0x13, 0x2F, 0x30, 0, 0x31, 0x4C, 0x4D, 0x4E, 0x5F, 0x60, 0x61, 0x57,
             0x35, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2D, 0x2E, 0, 0x2A, 0x49, 0x4A, 0x4B, 0x53, 0x54, 0x55, 0x56,
             0x29, 0x3A, 0x3B, 0x3C, 0x3D, 0, 0x3E, 0x3F, 0x40, 0x41, 0, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0, 0, 0, 0,
         };
+
+        // Apex M750 ISO (AZERTY, QWERTZ…) : la rangée Maj commence par « < » et décale Z(W)…/ d'une case (relevé sur un M750 AZERTY)
+        static readonly int[] M750GridIso = IsoGrid();
+
+        static int[] IsoGrid()
+        {
+            var g = (int[])M750Grid.Clone();
+            int[] row = { 0xE1, 0x64, 0x1D, 0x1B, 0x06, 0x19, 0x05, 0x11, 0x10, 0x36, 0x37, 0x38 };
+            for (int i = 0; i < row.Length; i++) g[22 + i] = row[i];
+            return g;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetKeyboardLayout(uint thread);
+
+        /// <summary>Clavier ISO (touche « < » à gauche) sauf si la disposition Windows est l'anglais US.</summary>
+        static bool IsIso()
+        {
+            int lang = (int)((long)GetKeyboardLayout(0) & 0xFFFF);
+            return lang != 0x0409 && lang != 0x1009 /* anglais (Canada) */;
+        }
 
         // Apex 5 / 7 / 9 / Pro : codes HID adressables (liste d'OpenRGB)
         static readonly int[] ApexKeys =
@@ -57,6 +78,7 @@ namespace ControlCenterK
         };
 
         readonly Model model;
+        readonly int[] grid;
         readonly SafeFileHandle h;
         readonly object io = new object();
         bool started;
@@ -69,7 +91,8 @@ namespace ControlCenterK
             Brand = "SteelSeries";
             Experimental = !m.Tested;
             var keys = new List<int>();
-            foreach (int k in m.Proto == Proto.ApexM ? M750Grid : ApexKeys) if (k > 0 && k < 0x100 && !keys.Contains(k)) keys.Add(k);
+            grid = IsIso() ? M750GridIso : M750Grid;
+            foreach (int k in m.Proto == Proto.ApexM ? grid : ApexKeys) if (k > 0 && k < 0x100 && !keys.Contains(k)) keys.Add(k);
             Keys = keys.ToArray();
         }
 
@@ -119,10 +142,10 @@ namespace ControlCenterK
             if (model.Proto == Proto.ApexM)
             {
                 buf[3] = 0x01; buf[4] = 0x8E; buf[5] = 0x01; buf[6] = 0x03; buf[7] = 0x06; buf[8] = 0x16;
-                for (int i = 0; i < M750Grid.Length; i++)
+                for (int i = 0; i < grid.Length; i++)
                 {
-                    int k = M750Grid[i];
-                    if (k == 0 || !colors.TryGetValue(k == 0x100 ? 0xE4 : k, out c)) continue; // Fn : même couleur que Ctrl droit
+                    int k = grid[i];
+                    if (k == 0 || !colors.TryGetValue(k, out c)) continue;
                     buf[9 + i * 3] = c.R;
                     buf[10 + i * 3] = c.G;
                     buf[11 + i * 3] = c.B;

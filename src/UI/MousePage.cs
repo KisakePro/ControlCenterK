@@ -67,6 +67,8 @@ namespace ControlCenterK
             D = MouseModule.DeviceConfig;
             if (dev == null) D = null;
             cards.Add(DetectedCard(dev));
+            var saved = SavedCard();
+            if (saved != null) cards.Add(saved);
             if (dev != null && D != null)
             {
                 cards.Add(DeviceCard(dev));
@@ -217,6 +219,31 @@ namespace ControlCenterK
                 c.Controls.Add(row);
                 y += Theme.S(50);
             }
+            SetNextY(c, y);
+            return c;
+        }
+
+        Card SavedCard()
+        {
+            var connected = new HashSet<string>();
+            foreach (var m in MouseModule.Detected) connected.Add(m.Key);
+            var items = new List<KeyValuePair<string, string>>();
+            lock (AppConfig.Sync)
+                foreach (var kv in M.Devices)
+                    if (!connected.Contains(kv.Key))
+                        items.Add(new KeyValuePair<string, string>(kv.Key, kv.Value == null || string.IsNullOrEmpty(kv.Value.Name) ? "Souris " + kv.Key : kv.Value.Name));
+            if (items.Count == 0) return null;
+            var c = NewCard("Souris enregistrées non connectées", "Réglages conservés pour des souris débranchées. Supprimez ceux dont vous n'avez plus besoin.");
+            int y = SavedDevices.Fill(c, NextY(c), items, Glyphs.Mouse, "souris", key =>
+            {
+                lock (AppConfig.Sync)
+                {
+                    M.Devices.Remove(key);
+                    if (M.Selected == key) M.Selected = null;
+                }
+                cfg.Save();
+                Rebuild();
+            });
             SetNextY(c, y);
             return c;
         }
@@ -384,7 +411,8 @@ namespace ControlCenterK
         Card ButtonsCard(GamingMouse dev)
         {
             var c = NewCard("Boutons",
-                "Milieu, précédent et suivant : réaffectés pour toutes les souris. " +
+                "Bouton du milieu, précédent / suivant et molette inclinée : réaffectables pour toutes les souris. " +
+                "Seul le bouton du milieu est listé d'office : ajoutez les autres avec « Détecter un bouton » si votre souris les possède. " +
                 (dev != null && dev.HasAdvancedMode ? (D.Advanced ? (dev.ExtraButtons.Length > 0 ? "Tous les boutons de la souris sont listés ci-dessous." : "Autres boutons (DPI, sniper, latéraux) : utilisez « Détecter un bouton ».")
                                                                   : "Pour les boutons DPI, sniper et latéraux supplémentaires : activez le mode avancé.")
                                                     : "Les autres boutons restent gérés par la souris.") +
@@ -399,7 +427,9 @@ namespace ControlCenterK
             c.Controls.Add(lastButton);
             SetNextY(c, detectBtn.Bottom + Theme.S(12));
 
-            var ids = new List<string> { "hid:2", "hid:3", "hid:4", "hid:tl", "hid:tr" };
+            // précédent / suivant / molette inclinée : listés seulement une fois détectés (toutes les souris ne les ont pas)
+            var ids = new List<string> { "hid:2" };
+            lock (AppConfig.Sync) foreach (var k in new[] { "hid:3", "hid:4", "hid:tl", "hid:tr" }) if (M.Buttons.ContainsKey(k)) ids.Add(k);
             // boutons supplémentaires connus d'avance (SteelSeries en mode avancé), sinon ceux déjà détectés (Corsair)
             if (dev != null && D != null && D.Advanced)
                 for (int i = 0; i < dev.ExtraButtons.Length; i++) ids.Add(dev.ButtonPrefix + i);
@@ -513,7 +543,7 @@ namespace ControlCenterK
                 MouseModule.UpdateHook();
             };
             hint();
-            if (id.StartsWith("cor:"))
+            if (id != "hid:2" && (id.StartsWith("cor:") || id.StartsWith("hid:")))
             {
                 var del = new FlatButton("Retirer") { Anchor = AnchorStyles.Top | AnchorStyles.Right };
                 del.FitWidth();
@@ -531,7 +561,7 @@ namespace ControlCenterK
 
         void Store(string id, MouseAction a)
         {
-            if (!id.StartsWith("cor:") && string.IsNullOrEmpty(a.Kind) && string.IsNullOrEmpty(a.Value)) M.Buttons.Remove(id);
+            if (id == "hid:2" && string.IsNullOrEmpty(a.Kind) && string.IsNullOrEmpty(a.Value)) M.Buttons.Remove(id);
             else M.Buttons[id] = a;
         }
 
@@ -588,7 +618,7 @@ namespace ControlCenterK
             }
             bool isNew = false;
             lock (AppConfig.Sync)
-                if (id.StartsWith("cor:") && !M.Buttons.ContainsKey(id)) { M.Buttons[id] = new MouseAction { Name = DefaultName(id) }; isNew = true; }
+                if ((id.StartsWith("cor:") || (id.StartsWith("hid:") && id != "hid:2")) && !M.Buttons.ContainsKey(id)) { M.Buttons[id] = new MouseAction { Name = DefaultName(id) }; isNew = true; }
             if (isNew) { cfg.Save(); Rebuild(); }
             else
             {
