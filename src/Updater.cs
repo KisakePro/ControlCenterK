@@ -106,6 +106,23 @@ namespace ControlCenterK
             return info;
         }
 
+        /// <summary>Charge la liste des versions publiées en arrière-plan (sans toucher à la date du dernier contrôle).</summary>
+        public static void LoadReleasesAsync()
+        {
+            new Thread(() =>
+            {
+                try
+                {
+                    var all = FetchAll();
+                    Releases = all;
+                    if (all.Count > 0 && Compare(all[0].Version, AppVersion.Current) > 0) Available = all[0];
+                }
+                catch { return; }
+                var h = Changed;
+                if (h != null) h();
+            }) { IsBackground = true, Name = "Liste des versions" }.Start();
+        }
+
         /// <summary>Contrôle en arrière-plan. "force" ignore la limite d'un contrôle par jour.</summary>
         public static void CheckAsync(AppConfig cfg, bool force, Action<UpdateInfo, string> done)
         {

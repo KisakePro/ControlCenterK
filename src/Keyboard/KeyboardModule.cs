@@ -294,7 +294,7 @@ namespace ControlCenterK
         [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
         [StructLayout(LayoutKind.Sequential)] struct KBDLL { public int vk, scan, flags, time; public IntPtr extra; }
 
-        static IntPtr hook;
+        static volatile IntPtr hook;
         static HookProc hookProc; // gardé en champ pour le GC
 
         /// <summary>Installe le crochet seulement s'il sert : macro définie, effet réactif ou détection en cours.</summary>
@@ -308,19 +308,42 @@ namespace ControlCenterK
                     var c = dc;
                     if (c != null && dev != null && c.Effect == "reactive") need = true;
                 }
-            if (need && Running && hook == IntPtr.Zero)
+            if (need && Running && hook == IntPtr.Zero && hookThread == null)
             {
-                hookProc = HookCallback;
-                hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, hookProc, GetModuleHandle(null), 0);
+                // le crochet bas niveau a besoin d'une boucle de messages : il vit dans son propre thread,
+                // quel que soit le thread appelant (interface, minuterie de détection…)
+                var ready = new ManualResetEvent(false);
+                hookThread = new Thread(() =>
+                {
+                    hookThreadId = GetCurrentThreadId();
+                    hookProc = HookCallback;
+                    hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, hookProc, GetModuleHandle(null), 0);
+                    ready.Set();
+                    MSG m;
+                    while (GetMessage(out m, IntPtr.Zero, 0, 0) > 0) { }
+                    if (hook != IntPtr.Zero) UnhookWindowsHookEx(hook);
+                    hook = IntPtr.Zero;
+                }) { IsBackground = true, Name = "Crochet clavier" };
+                hookThread.Start();
+                ready.WaitOne(2000);
             }
-            else if ((!need || !Running) && hook != IntPtr.Zero) RemoveHook();
+            else if ((!need || !Running) && hookThread != null) RemoveHook();
         }
+
+        [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam, lParam; public uint time; public int x, y; }
+        [DllImport("user32.dll")] static extern int GetMessage(out MSG m, IntPtr hwnd, uint min, uint max);
+        [DllImport("user32.dll")] static extern bool PostThreadMessage(uint thread, uint msg, IntPtr w, IntPtr l);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+        static Thread hookThread;
+        static volatile uint hookThreadId;
 
         static void RemoveHook()
         {
-            if (hook == IntPtr.Zero) return;
-            UnhookWindowsHookEx(hook);
-            hook = IntPtr.Zero;
+            var t = hookThread;
+            if (t == null) return;
+            hookThread = null;
+            PostThreadMessage(hookThreadId, 0x12 /* WM_QUIT */, IntPtr.Zero, IntPtr.Zero);
+            if (t != Thread.CurrentThread) t.Join(1000);
         }
 
         static IntPtr HookCallback(int code, IntPtr wParam, IntPtr lParam)
