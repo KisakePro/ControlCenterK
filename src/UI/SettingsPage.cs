@@ -14,7 +14,9 @@ namespace ControlCenterK
         readonly Label title, lblMem, lblFolder;
         readonly Card genCard, midiCard, infoCard, lookCard, modCard, updCard;
         Label updStatus;
-        FlatButton updInstall, updNotes, updCheck, btnFolderDefault;
+        FlatButton updInstall, updNotes, updCheck, updPick, btnFolderDefault;
+        Label updPickLbl;
+        DropButton updVersions;
         Card rowCard;   // carte en cours de remplissage par AddRow
         int y;
 
@@ -188,10 +190,22 @@ namespace ControlCenterK
             updCheck.FitWidth();
             updCheck.Click += (s, e) => CheckNow();
             updInstall = new FlatButton("Installer", true) { Glyph = "\uE896", Visible = false };
-            updInstall.Click += (s, e) => InstallUpdate();
+            updInstall.Click += (s, e) => InstallUpdate(Updater.Available);
             updNotes = new FlatButton("Nouveautés") { Visible = false };
             updNotes.FitWidth();
             updNotes.Click += (s, e) => { var u = Updater.Available; if (u != null) try { Process.Start(u.PageUrl); } catch { } };
+
+            // choix d'une version précise (ex. revenir à la précédente après une mauvaise mise à jour)
+            updPickLbl = Theme.Label("Installer une version précise :", Theme.Ui(9f), Theme.Muted, Theme.Card);
+            updPickLbl.Visible = false;
+            updVersions = new DropButton { Width = Theme.S(260), Visible = false };
+            updPick = new FlatButton("Installer cette version") { Glyph = "", Visible = false };
+            updPick.FitWidth();
+            updPick.Click += (s, e) =>
+            {
+                foreach (var r in Updater.Releases) if (r.Version == updVersions.Value) { InstallUpdate(r); return; }
+            };
+            updCard.Controls.AddRange(new Control[] { updPickLbl, updVersions, updPick });
 
             var auto = new Toggle { Checked = cfg.AutoUpdate, Tag = "right" };
             auto.CheckedChanged += (s, e) => { lock (AppConfig.Sync) cfg.AutoUpdate = auto.Checked; cfg.Save(); };
@@ -209,6 +223,15 @@ namespace ControlCenterK
                 if (updInstall.Visible) { updInstall.Location = new Point(x, y); x = updInstall.Right + Theme.S(8); }
                 if (updNotes.Visible) updNotes.Location = new Point(x, y);
                 int h = updCheck.Bottom + Theme.S(18);
+                if (updVersions.Visible)
+                {
+                    int y2 = updCheck.Bottom + Theme.S(14);
+                    updVersions.SetBounds(updPickLbl.Right + Theme.S(10), y2, Theme.S(260), updCheck.Height);
+                    updPickLbl.Location = new Point(Theme.S(20), y2 + (updVersions.Height - updPickLbl.Height) / 2);
+                    updVersions.Left = updPickLbl.Right + Theme.S(10);
+                    updPick.Location = new Point(updVersions.Right + Theme.S(8), y2);
+                    h = updVersions.Bottom + Theme.S(18);
+                }
                 if (updCard.Height != h) updCard.Height = h;
             };
             Updater.Changed += OnUpdateChanged;
@@ -241,6 +264,24 @@ namespace ControlCenterK
                 updStatus.ForeColor = Theme.Muted;
             }
             updInstall.Visible = updNotes.Visible = u != null;
+            var rels = Updater.Releases;
+            string keep = updVersions.Value;
+            updVersions.Items.Clear();
+            foreach (var r in rels)
+            {
+                int cmp = Updater.Compare(r.Version, AppVersion.Current);
+                updVersions.Add(r.Version, "Version " + r.Version + (cmp == 0 ? "  (installée)" : cmp > 0 ? "  (plus récente)" : "  (ancienne)"));
+            }
+            bool found = false;
+            foreach (var r in rels) if (r.Version == keep) found = true;
+            if (!found && rels.Count > 0)
+            {
+                // par défaut : la version précédant celle installée (cas d'un retour arrière)
+                keep = rels[0].Version;
+                foreach (var r in rels) if (Updater.Compare(r.Version, AppVersion.Current) < 0) { keep = r.Version; break; }
+            }
+            updVersions.Value = keep;
+            updPickLbl.Visible = updVersions.Visible = updPick.Visible = rels.Count > 0;
             updCard.PerformLayout();
             OnResize(EventArgs.Empty);
         }
@@ -255,13 +296,15 @@ namespace ControlCenterK
             });
         }
 
-        void InstallUpdate()
+        void InstallUpdate(UpdateInfo u)
         {
-            var u = Updater.Available;
             if (u == null) return;
-            if (MessageBox.Show(FindForm(), "Télécharger et installer la version " + u.Version + " ?\n\nL'application va se fermer pendant la mise à jour ; vos réglages sont conservés.",
+            int cmp = Updater.Compare(u.Version, AppVersion.Current);
+            string what = cmp < 0 ? "Revenir à l'ancienne version " + u.Version + " ?\n\nLes réglages ajoutés par une version plus récente peuvent ne pas être repris."
+                        : cmp == 0 ? "Réinstaller la version " + u.Version + " ?" : "Télécharger et installer la version " + u.Version + " ?";
+            if (MessageBox.Show(FindForm(), what + "\n\nL'application va se fermer pendant l'installation ; vos réglages sont conservés.",
                     "Mise à jour", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            updInstall.Enabled = updCheck.Enabled = false;
+            updInstall.Enabled = updCheck.Enabled = updPick.Enabled = false;
             new System.Threading.Thread(() =>
             {
                 string err = Updater.DownloadAndInstall(u, p => { try { BeginInvoke(new Action(() => updStatus.Text = "Téléchargement… " + p + " %")); } catch { } });
@@ -269,7 +312,7 @@ namespace ControlCenterK
                 {
                     BeginInvoke(new Action(() =>
                     {
-                        updInstall.Enabled = updCheck.Enabled = true;
+                        updInstall.Enabled = updCheck.Enabled = updPick.Enabled = true;
                         if (err != null) { updStatus.Text = err; updStatus.ForeColor = Theme.Red; }
                         else updStatus.Text = "Installateur lancé : suivez ses instructions.";
                     }));

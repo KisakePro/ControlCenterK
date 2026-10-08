@@ -397,6 +397,13 @@ namespace ControlCenterK
             kind.Add("none", "Désactiver la touche");
             kind.Value = a.Kind;
 
+            // raccourci / macro : envoyé une fois à l'appui, ou tant que la touche reste enfoncée
+            var mode = new DropButton { Width = Theme.S(130), Location = new Point(kind.Right + Theme.S(10), Theme.S(6)) };
+            mode.Add("pulse", "Impulsion");
+            mode.Add("hold", "Continu");
+            mode.Value = a.Pulse ? "pulse" : "hold";
+            mode.ValueChanged += (s, e) => { lock (AppConfig.Sync) { a.Mode = mode.Value; } cfg.Save(); };
+
             var holder = new Panel { Location = new Point(kind.Right + Theme.S(10), Theme.S(7)), BackColor = Theme.SurfaceHi, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             holder.Size = new Size(row.Width - holder.Left - Theme.S(10), Theme.S(30));
             var val = new TextBox { BorderStyle = BorderStyle.None, BackColor = Theme.SurfaceHi, ForeColor = Theme.Text, Font = Theme.Ui(9.5f), Text = a.Value,
@@ -406,6 +413,11 @@ namespace ControlCenterK
             Action hint = () =>
             {
                 string k = kind.Value;
+                mode.Visible = k == "keys" || k == "macro";
+                mode.Value = a.Pulse ? "pulse" : "hold";
+                int left = (mode.Visible ? mode.Right : kind.Right) + Theme.S(10);
+                holder.Width += holder.Left - left;
+                holder.Left = left;
                 holder.Visible = k == "keys" || k == "macro" || k == "click";
                 string cue = k == "keys" ? "Cliquez ici puis appuyez sur la combinaison (ex. Ctrl+Maj+S)" : k == "macro" ? "Ctrl+C, 50ms, Ctrl+V" :
                              k == "click" ? "0 gauche · 1 droit · 2 milieu · 3 précédent · 4 suivant" : "";
@@ -416,11 +428,12 @@ namespace ControlCenterK
             {
                 if (kind.Value != "keys") return;
                 e.SuppressKeyPress = true;
-                if (e.KeyCode == Keys.ControlKey || e.KeyCode == Keys.ShiftKey || e.KeyCode == Keys.Menu) return;
+                if (e.KeyCode == Keys.ControlKey || e.KeyCode == Keys.ShiftKey || e.KeyCode == Keys.Menu || e.KeyCode == Keys.LWin || e.KeyCode == Keys.RWin) return;
                 var parts = new List<string>();
                 if (e.Control) parts.Add("Ctrl");
                 if (e.Shift) parts.Add("Maj");
                 if (e.Alt) parts.Add("Alt");
+                if (Native.WinDown()) parts.Add("Win");
                 parts.Add(InputSim.Describe(e.KeyCode));
                 val.Text = string.Join("+", parts);
             };
@@ -445,7 +458,7 @@ namespace ControlCenterK
             del.Location = new Point(row.Width - del.Width - Theme.S(8), Theme.S(6));
             del.Click += (s, e) => { lock (AppConfig.Sync) K.Macros.Remove(id); cfg.Save(); KeyboardModule.UpdateHook(); Rebuild(); };
             holder.Width -= del.Width + Theme.S(8);
-            row.Controls.AddRange(new Control[] { name, kind, holder, del });
+            row.Controls.AddRange(new Control[] { name, kind, mode, holder, del });
             c.Controls.Add(row);
             macroRows[id] = row;
             SetNextY(c, y + Theme.S(52));

@@ -143,9 +143,8 @@ namespace ControlCenterK
             separators.Clear();
             blockAbove = false;
             int y = Theme.S(84);
-            // Profil actif : juste sous le nom de l'application
-            capProfile.Visible = ddProfile.Visible = btnProfiles.Visible = cfg.ModMidi;
-            if (cfg.ModMidi)
+            // Profil actif : juste sous le nom de l'application (toujours visible, quels que soient les modules)
+            capProfile.Visible = ddProfile.Visible = btnProfiles.Visible = true;
             {
                 capProfile.Location = new Point(Theme.S(24), y);
                 ddProfile.SetBounds(Theme.S(18), capProfile.Bottom + Theme.S(6), side.Width - Theme.S(18) - Theme.S(56), Theme.S(34));
