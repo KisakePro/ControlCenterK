@@ -90,7 +90,28 @@ namespace ControlCenterK
             if (vk == 0x13) return Get(0x48);            // Pause (même code de balayage que Verr num)
             if (vk == 0x90) return Get(0x53);            // Verr num
             foreach (var k in Keys) if (k.Scan == scan && k.Ext == ext && k.Usage != 0x48 && k.Usage != 0x53) return k;
+            // certains claviers / logiciels (SteelSeries GG…) envoient un code de balayage absent ou inattendu :
+            // on le déduit de la touche virtuelle
+            uint sc = MapVirtualKey((uint)vk, 4 /* MAPVK_VK_TO_VSC_EX */);
+            if (sc != 0)
+            {
+                bool e = (sc & 0xFF00) == 0xE000 || IsExtendedVk(vk);
+                int code = (int)(sc & 0xFF);
+                if (code != scan || e != ext)
+                    foreach (var k in Keys) if (k.Scan == code && k.Ext == e && k.Usage != 0x48 && k.Usage != 0x53) return k;
+            }
             return null;
+        }
+
+        static bool IsExtendedVk(int vk)
+        {
+            switch (vk)
+            {
+                case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27: case 0x28: // Pg, Fin, Début, flèches
+                case 0x2C: case 0x2D: case 0x2E: case 0x5B: case 0x5C: case 0x5D: case 0x6F: case 0xA3: case 0xA5:
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>Libellé affiché : fixe, ou nom Windows de la touche (suit la disposition du clavier, ex. AZERTY).</summary>

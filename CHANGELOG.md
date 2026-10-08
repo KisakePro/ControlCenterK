@@ -2,6 +2,12 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.5.2] - 2026-10-08
+
+- Macros clavier : les touches sont de nouveau reconnues (claviers SteelSeries notamment). Le crochet clavier
+  tourne désormais dans son propre thread, et une touche sans code de balayage est identifiée par sa touche virtuelle.
+- Mises à jour : la liste déroulante des versions GitHub se remplit dès l'ouverture des paramètres.
+
 ## [0.5.1] - 2026-10-08
 
 - Le profil actif reste affiché même quand le module Contrôleur est désactivé.

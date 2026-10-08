@@ -237,6 +237,7 @@ namespace ControlCenterK
             Updater.Changed += OnUpdateChanged;
             Disposed += (s, e) => Updater.Changed -= OnUpdateChanged;
             ShowUpdate(null);
+            if (Updater.Releases.Count == 0) Updater.LoadReleasesAsync();
         }
 
         void OnUpdateChanged()
