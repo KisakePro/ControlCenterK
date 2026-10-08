@@ -2,6 +2,13 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.5.1] - 2026-10-08
+
+- Le profil actif reste affiché même quand le module Contrôleur est désactivé.
+- Raccourcis et macros (clavier et souris) : choix du mode Impulsion (une fois à l'appui) ou Continu
+  (maintenu / rejoué tant que la touche est enfoncée) ; la touche Windows peut faire partie d'une combinaison.
+- Mises à jour : liste des versions publiées pour installer une version précise, y compris revenir à une ancienne.
+
 ## [0.5] - 2026-10-07
 
 - Nouvelle numérotation des versions : 0.5 (remplace la série 1.x).
