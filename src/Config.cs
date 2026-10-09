@@ -181,6 +181,8 @@ namespace ControlCenterK
         public bool ModRouter { get; set; }                      // module "Routage audio"
         public bool ModMouse { get; set; }                       // module "Souris"
         public bool ModKeyboard { get; set; }                    // module "Clavier"
+        public bool ModFps { get; set; }                         // module "FPS"
+        public FpsConfig Fps { get; set; }
         public MouseConfig Mouse { get; set; }
         public KeyboardConfig Keyboard { get; set; }
         public RouterConfig Router { get; set; }
@@ -198,6 +200,7 @@ namespace ControlCenterK
             ControlValues = new Dictionary<string, int>();
             Mouse = new MouseConfig();
             Keyboard = new KeyboardConfig();
+            Fps = new FpsConfig();
             ModMidi = true;
             ModKeyboard = true;
             AutoUpdate = true;
@@ -259,6 +262,8 @@ namespace ControlCenterK
             Mouse.Fix();
             if (Keyboard == null) Keyboard = new KeyboardConfig();
             Keyboard.Fix();
+            if (Fps == null) Fps = new FpsConfig();
+            Fps.Fix();
             if (Router == null) Router = new RouterConfig();
             Router.Fix();
             if (Theme == null) Theme = new ThemeDef { Name = "Bleu nuit", Accent = "#4C8DFF", Base = "#AAB4E1", Intensity = 1 };
@@ -607,6 +612,6 @@ namespace ControlCenterK
         public const string Volume = "\uE767", Mic = "\uE720", Speaker = "\uE7F5", Headphone = "\uE7F6",
             App = "\uE7C4", Apps = "\uE71D", Focus = "\uE7F4", System = "\uE770", Settings = "\uE713",
             Mixer = "\uE9E9", Close = "\uE711", Add = "\uE710", Chevron = "\uE70D", Refresh = "\uE72C",
-            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
+            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Fps = "\uEC4A", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
     }
 }

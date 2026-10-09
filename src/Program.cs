@@ -32,6 +32,9 @@ namespace ControlCenterK
             using (var mutex = new Mutex(true, @"Local\ControlCenterK.Instance", out created))
             using (var show = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\ControlCenterK.Show"))
             {
+                // relance en administrateur : on attend que l'instance précédente ait fini de se fermer
+                if (!created && Array.IndexOf(args, "--elevated") >= 0)
+                    try { created = mutex.WaitOne(15000); } catch (AbandonedMutexException) { created = true; }
                 if (!created)
                 {
                     show.Set(); // une instance tourne déjà : on lui demande d'afficher sa fenêtre
@@ -81,15 +84,34 @@ namespace ControlCenterK
             // Clavier : éclairage et macros
             if (Cfg.ModKeyboard && !KeyboardModule.Running) KeyboardModule.Start(Cfg);
             else if (!Cfg.ModKeyboard && KeyboardModule.Running) KeyboardModule.Stop();
+            // FPS : mesure ETW et affichage par-dessus les programmes choisis
+            if (Cfg.ModFps && !FpsModule.Running) FpsModule.Start(Cfg);
+            else if (!Cfg.ModFps && FpsModule.Running) FpsModule.Stop();
 
             var h = ModulesChanged;
             if (h != null) h();
+        }
+
+        /// <summary>Événement demandant à l'application de se fermer (relance en administrateur).</summary>
+        public static Action QuitApp;
+
+        /// <summary>Relance l'application avec les droits administrateur (confirmation de Windows), puis ferme celle-ci.</summary>
+        public static void RestartElevated()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Application.ExecutablePath, "--elevated")
+                    { UseShellExecute = true, Verb = "runas" });
+            }
+            catch (System.ComponentModel.Win32Exception) { return; } // refusé par l'utilisateur
+            if (QuitApp != null) QuitApp();
         }
 
         public static void Shutdown()
         {
             if (MouseModule.Running) MouseModule.Stop(); // remet la souris en mode matériel
             if (KeyboardModule.Running) KeyboardModule.Stop(); // rend l'éclairage au clavier
+            if (FpsModule.Running) FpsModule.Stop(); // ferme la session de mesure
             if (Router != null) { Engine.Router = null; Router.Dispose(); Router = null; }
             VirtualHost.Stop();
         }
@@ -130,6 +152,7 @@ namespace ControlCenterK
             quitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\ControlCenterK.Quit");
             Host.Cfg = cfg;
             Host.Engine = engine;
+            Host.QuitApp = () => host.BeginInvoke(new Action(Quit));
             Host.ApplyModules();
 
             host = new HostWindow();
