@@ -341,7 +341,9 @@ namespace ControlCenterK
                 cfg.ModMouse, v => cfg.ModMouse = v);
             AddModule(Theme.S(70) + 3 * Theme.S(66), Glyphs.Keyboard, "Clavier", "Touches, macros et éclairage des claviers (en construction).",
                 cfg.ModKeyboard, v => cfg.ModKeyboard = v);
-            modCard.Height = Theme.S(70) + 4 * Theme.S(66) + Theme.S(8);
+            AddModule(Theme.S(70) + 4 * Theme.S(66), Glyphs.Fps, "FPS", "Images par seconde et leur courbe affichées par-dessus les jeux choisis (droits administrateur).",
+                cfg.ModFps, v => cfg.ModFps = v);
+            modCard.Height = Theme.S(70) + 5 * Theme.S(66) + Theme.S(8);
         }
 
         void AddModule(int y, string glyph, string label, string desc, bool value, Action<bool> apply)

@@ -2,6 +2,14 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.6] - 2026-10-10
+
+- Nouveau module « FPS » : images par seconde affichées par-dessus les programmes choisis, avec une courbe pour repérer
+  les chutes. Mesure par les événements Windows (DirectX 9 à 12, Vulkan, OpenGL), sans injection dans les jeux.
+  Couleur, taille, coin de la fenêtre, décalages, durée de la courbe, opacité du fond et aperçu réglables.
+  Fonctionne en fenêtré et en plein écran fenêtré ; nécessite les droits administrateur (ou le groupe
+  « Utilisateurs du journal de performances »).
+
 ## [0.5.4] - 2026-10-08
 
 - Souris et clavier : les périphériques enregistrés mais débranchés sont listés et peuvent être supprimés (avec confirmation).

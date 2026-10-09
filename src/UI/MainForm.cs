@@ -13,8 +13,8 @@ namespace ControlCenterK
     {
         readonly Engine engine;
         readonly Panel side, content;
-        readonly NavButton navCtl, navRoute, navAudio, navMouse, navKeyboard, navSettings;
-        readonly Label capProfile, capAudio, capDevices;
+        readonly NavButton navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navSettings;
+        readonly Label capProfile, capAudio, capDevices, capGames;
         readonly List<int> separators = new List<int>(); // lignes de séparation de la barre latérale
         bool blockAbove;                                  // mise en page : un bloc précède (séparation à tracer)
         // Pages créées à la demande : un module désactivé n'a pas de page en mémoire.
@@ -22,6 +22,7 @@ namespace ControlCenterK
         RouterPage pRoute;
         MousePage pMouse;
         KeyboardPage pKeyboard;
+        FpsPage pFps;
         AudioPage pAudio;
         SettingsPage pSettings;
         string current;
@@ -56,13 +57,16 @@ namespace ControlCenterK
             navAudio = new NavButton(Glyphs.Speaker, "Périphériques audio");
             navMouse = new NavButton(Glyphs.Mouse, "Souris");
             navKeyboard = new NavButton(Glyphs.Keyboard, "Clavier");
+            navFps = new NavButton(Glyphs.Fps, "FPS");
             navSettings = new NavButton(Glyphs.Settings, "Paramètres");
-            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navKeyboard, navSettings }) side.Controls.Add(n);
+            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navSettings }) side.Controls.Add(n);
             capAudio = Theme.Label("AUDIO", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
             capDevices = Theme.Label("PÉRIPHÉRIQUES", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
-            side.Controls.AddRange(new Control[] { capAudio, capDevices });
+            capGames = Theme.Label("JEUX", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
+            side.Controls.AddRange(new Control[] { capAudio, capDevices, capGames });
             navMouse.Click += (s, e) => ShowPage("mouse");
             navKeyboard.Click += (s, e) => ShowPage("keyboard");
+            navFps.Click += (s, e) => ShowPage("fps");
             navCtl.Click += (s, e) => ShowPage("ctl");
             navRoute.Click += (s, e) => ShowPage("route");
             navAudio.Click += (s, e) => ShowPage("audio");
@@ -154,6 +158,7 @@ namespace ControlCenterK
             }
             y = NavSection(capAudio, y, new[] { navCtl, navRoute, navAudio }, new[] { cfg.ModMidi, cfg.ModRouter, true });
             y = NavSection(capDevices, y, new[] { navMouse, navKeyboard }, new[] { cfg.ModMouse, cfg.ModKeyboard });
+            y = NavSection(capGames, y, new[] { navFps }, new[] { cfg.ModFps });
             // Paramètres : en bas à gauche, juste au-dessus de l'équipement connecté
             navSettings.SetBounds(0, side.ClientSize.Height - Theme.S(56) - navSettings.Height - Theme.S(4), side.Width, navSettings.Height);
             separators.Add(navSettings.Top - Theme.S(8));
@@ -197,6 +202,7 @@ namespace ControlCenterK
                 case "audio": page = pAudio ?? (pAudio = Add(new AudioPage(engine))); break;
                 case "mouse": page = pMouse ?? (pMouse = Add(new MousePage(engine.Cfg))); break;
                 case "keyboard": page = pKeyboard ?? (pKeyboard = Add(new KeyboardPage(engine.Cfg))); break;
+                case "fps": page = pFps ?? (pFps = Add(new FpsPage(engine.Cfg))); break;
                 default: key = "settings"; page = pSettings ?? (pSettings = Add(new SettingsPage(engine))); break;
             }
             current = key;
@@ -206,6 +212,7 @@ namespace ControlCenterK
             navAudio.Selected = key == "audio";
             navMouse.Selected = key == "mouse";
             navKeyboard.Selected = key == "keyboard";
+            navFps.Selected = key == "fps";
             navSettings.Selected = key == "settings";
             if (page == pAudio) pAudio.Reload();
             if (page == pSettings) pSettings.RefreshInfo();
@@ -230,9 +237,10 @@ namespace ControlCenterK
                 if (!cfg.ModRouter && pRoute != null) { content.Controls.Remove(pRoute); pRoute.Dispose(); pRoute = null; }
                 if (!cfg.ModMouse && pMouse != null) { content.Controls.Remove(pMouse); pMouse.Dispose(); pMouse = null; }
                 if (!cfg.ModKeyboard && pKeyboard != null) { content.Controls.Remove(pKeyboard); pKeyboard.Dispose(); pKeyboard = null; }
+                if (!cfg.ModFps && pFps != null) { content.Controls.Remove(pFps); pFps.Dispose(); pFps = null; }
                 LayoutNav();
                 if ((current == "ctl" && !cfg.ModMidi) || (current == "route" && !cfg.ModRouter) || (current == "mouse" && !cfg.ModMouse)
-                    || (current == "keyboard" && !cfg.ModKeyboard)) ShowPage("settings");
+                    || (current == "keyboard" && !cfg.ModKeyboard) || (current == "fps" && !cfg.ModFps)) ShowPage("settings");
                 UpdateStatus();
                 side.Invalidate();
             });
