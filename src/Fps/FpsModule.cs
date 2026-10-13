@@ -106,6 +106,33 @@ namespace ControlCenterK
             return n;
         }
 
+        [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        static readonly int SelfPid = Process.GetCurrentProcess().Id;
+        static IntPtr lastGame;
+
+        /// <summary>Fenêtre d'un programme surveillé : le dernier jeu suivi s'il est encore ouvert, sinon le premier trouvé.</summary>
+        static IntPtr GameWindow()
+        {
+            List<string> apps;
+            lock (AppConfig.Sync) apps = new List<string>(F.Apps);
+            if (lastGame != IntPtr.Zero && IsWindow(lastGame) && IsWindowVisible(lastGame) && !IsIconic(lastGame))
+            {
+                int p;
+                GetWindowThreadProcessId(lastGame, out p);
+                if (apps.Contains(NameOf(p))) return lastGame;
+            }
+            foreach (var app in apps)
+                foreach (var proc in Process.GetProcessesByName(app))
+                    using (proc)
+                    {
+                        IntPtr h;
+                        try { h = proc.MainWindowHandle; } catch { continue; }
+                        if (h != IntPtr.Zero && IsWindowVisible(h) && !IsIconic(h)) return lastGame = h;
+                    }
+            return IntPtr.Zero;
+        }
+
         static Rectangle ClientOnScreen(IntPtr h)
         {
             RECT r;
@@ -126,6 +153,7 @@ namespace ControlCenterK
             lastEnd = end;
             IntPtr wnd;
             int pid, frames;
+            bool behind = false;
             bool preview = previewWnd != IntPtr.Zero && DateTime.Now < previewUntil;
             if (preview)
             {
@@ -141,9 +169,16 @@ namespace ControlCenterK
                 previewWnd = IntPtr.Zero;
                 wnd = GetForegroundWindow();
                 GetWindowThreadProcessId(wnd, out pid);
+                // ControlCenterK au premier plan (réglages en cours) : l'affichage reste sur le jeu, derrière
+                if (pid == SelfPid)
+                {
+                    var game = GameWindow();
+                    if (game != IntPtr.Zero) { wnd = game; GetWindowThreadProcessId(wnd, out pid); behind = true; }
+                }
                 bool watched;
                 lock (AppConfig.Sync) watched = pid > 0 && F.Apps.Contains(NameOf(pid));
                 if (!watched || IsIconic(wnd)) { Hide(); return; }
+                if (!behind) lastGame = wnd;
                 // toutes les instances du programme : certains (navigateurs, Electron…) affichent depuis un processus annexe
                 string name = NameOf(pid);
                 int fg = pid;
@@ -174,7 +209,7 @@ namespace ControlCenterK
             var area = ClientOnScreen(wnd);
             if (area.Width <= 0 || area.Height <= 0) { Hide(); return; }
             if (overlay == null) overlay = new FpsOverlay();
-            overlay.Render(fps, samples, keep, look, area);
+            overlay.Render(fps, samples, keep, look, area, behind ? wnd : IntPtr.Zero);
         }
 
         static void Hide()
@@ -221,7 +256,13 @@ namespace ControlCenterK
         [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [StructLayout(LayoutKind.Sequential, Pack = 1)] struct BLEND { public byte Op, Flags, Alpha, Format; }
 
-        public void Render(int fps, List<int> samples, int capacity, FpsLook f, Rectangle area)
+        [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+
+        /// <summary>
+        /// Dessine l'affichage. "behind" : fenêtre du jeu quand il est en arrière-plan ; l'affichage est alors posé
+        /// juste au-dessus de lui (sous ControlCenterK) au lieu d'être au premier plan.
+        /// </summary>
+        public void Render(int fps, List<int> samples, int capacity, FpsLook f, Rectangle area, IntPtr behind)
         {
             using (var bmp = Draw(fps, samples, capacity, f))
             {
@@ -231,7 +272,16 @@ namespace ControlCenterK
             }
             if (!Visible) Show();
             // reste au-dessus du jeu (certains jeux repassent devant)
-            SetWindowPos(Handle, new IntPtr(-1) /* HWND_TOPMOST */, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 /* NOSIZE | NOMOVE | NOACTIVATE */);
+            const uint flags = 0x1 | 0x2 | 0x10; // NOSIZE | NOMOVE | NOACTIVATE
+            if (behind == IntPtr.Zero) SetWindowPos(Handle, new IntPtr(-1) /* HWND_TOPMOST */, 0, 0, 0, 0, flags);
+            else
+            {
+                SetWindowPos(Handle, new IntPtr(-2) /* HWND_NOTOPMOST */, 0, 0, 0, 0, flags);
+                // juste au-dessus du jeu : on se place sous la fenêtre qui le précède
+                IntPtr above = GetWindow(behind, 3 /* GW_HWNDPREV */);
+                if (above == Handle) return;
+                SetWindowPos(Handle, above == IntPtr.Zero ? IntPtr.Zero /* HWND_TOP */ : above, 0, 0, 0, 0, flags);
+            }
         }
 
         /// <summary>Image de l'affichage : nombre de FPS, et courbe en dessous. Largeur fixe (3 chiffres) pour ne pas bouger.</summary>
