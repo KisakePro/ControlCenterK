@@ -23,7 +23,8 @@ namespace ControlCenterK
         static FpsOverlay overlay;
         static readonly List<int> samples = new List<int>();   // images par tranche de 250 ms, pour le processus suivi
         static readonly Dictionary<int, string> names = new Dictionary<int, string>();
-        static int trackedPid;
+        static int trackedPid, secondFps;
+        static long lastEnd;
         static IntPtr previewWnd;
         static DateTime previewUntil;
         static int previewTick;
@@ -116,7 +117,11 @@ namespace ControlCenterK
 
         static void Tick()
         {
-            var counts = FpsCapture.TakeCounts();
+            // fenêtre de mesure décalée de 200 ms : les derniers événements ont le temps d'arriver
+            long end = FpsCapture.Now - FpsCapture.Freq / 5;
+            if (lastEnd == 0 || end - lastEnd > FpsCapture.Freq) lastEnd = end - FpsCapture.Freq / PerSecond;
+            long from = lastEnd;
+            lastEnd = end;
             IntPtr wnd;
             int pid, frames;
             bool preview = previewWnd != IntPtr.Zero && DateTime.Now < previewUntil;
@@ -139,8 +144,11 @@ namespace ControlCenterK
                 if (!watched || IsIconic(wnd)) { Hide(); return; }
                 // toutes les instances du programme : certains (navigateurs, Electron…) affichent depuis un processus annexe
                 string name = NameOf(pid);
-                frames = 0;
-                foreach (var kv in counts) if (kv.Key == pid || NameOf(kv.Key) == name) frames += kv.Value;
+                int fg = pid;
+                Func<int, bool> match = p => p == fg || NameOf(p) == name;
+                frames = FpsCapture.Count(match, from, end);
+                // FPS affichés : images horodatées dans la dernière seconde (valeur exacte, sans effet de paquet)
+                secondFps = FpsCapture.Count(match, end - FpsCapture.Freq, end);
             }
             if (pid != trackedPid) { samples.Clear(); trackedPid = pid; }
             samples.Add(frames);
@@ -148,10 +156,14 @@ namespace ControlCenterK
             lock (AppConfig.Sync) keep = F.GraphSeconds * PerSecond;
             if (samples.Count > keep) samples.RemoveRange(0, samples.Count - keep);
 
-            // FPS affichés : images de la dernière seconde
-            int n = Math.Min(PerSecond, samples.Count), sum = 0;
-            for (int i = samples.Count - n; i < samples.Count; i++) sum += samples[i];
-            int fps = n == 0 ? 0 : sum * PerSecond / n;
+            int fps;
+            if (preview)
+            {
+                int n = Math.Min(PerSecond, samples.Count), sum = 0;
+                for (int i = samples.Count - n; i < samples.Count; i++) sum += samples[i];
+                fps = n == 0 ? 0 : sum * PerSecond / n;
+            }
+            else fps = secondFps;
             string cur = preview ? "aperçu" : NameOf(pid);
             if (cur != Current || fps != CurrentFps) { Current = cur; CurrentFps = fps; Raise(); }
 
