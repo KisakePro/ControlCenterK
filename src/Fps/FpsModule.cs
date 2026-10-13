@@ -28,6 +28,7 @@ namespace ControlCenterK
         static IntPtr previewWnd;
         static DateTime previewUntil;
         static int previewTick;
+        static string previewApp; // apparence montrée par l'aperçu (null : réglages par défaut)
 
         public static bool Running { get; private set; }
         public static event Action Changed;
@@ -75,9 +76,10 @@ namespace ControlCenterK
         }
 
         /// <summary>Montre l'affichage quelques secondes sur une fenêtre (valeurs simulées), pour régler l'apparence.</summary>
-        public static void Preview(IntPtr wnd)
+        public static void Preview(IntPtr wnd, string app)
         {
             previewWnd = wnd;
+            previewApp = app;
             previewUntil = DateTime.Now.AddSeconds(6);
             previewTick = 0;
             samples.Clear();
@@ -104,6 +106,33 @@ namespace ControlCenterK
             return n;
         }
 
+        [DllImport("user32.dll")] static extern bool IsWindow(IntPtr h);
+        [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+        static readonly int SelfPid = Process.GetCurrentProcess().Id;
+        static IntPtr lastGame;
+
+        /// <summary>Fenêtre d'un programme surveillé : le dernier jeu suivi s'il est encore ouvert, sinon le premier trouvé.</summary>
+        static IntPtr GameWindow()
+        {
+            List<string> apps;
+            lock (AppConfig.Sync) apps = new List<string>(F.Apps);
+            if (lastGame != IntPtr.Zero && IsWindow(lastGame) && IsWindowVisible(lastGame) && !IsIconic(lastGame))
+            {
+                int p;
+                GetWindowThreadProcessId(lastGame, out p);
+                if (apps.Contains(NameOf(p))) return lastGame;
+            }
+            foreach (var app in apps)
+                foreach (var proc in Process.GetProcessesByName(app))
+                    using (proc)
+                    {
+                        IntPtr h;
+                        try { h = proc.MainWindowHandle; } catch { continue; }
+                        if (h != IntPtr.Zero && IsWindowVisible(h) && !IsIconic(h)) return lastGame = h;
+                    }
+            return IntPtr.Zero;
+        }
+
         static Rectangle ClientOnScreen(IntPtr h)
         {
             RECT r;
@@ -124,6 +153,7 @@ namespace ControlCenterK
             lastEnd = end;
             IntPtr wnd;
             int pid, frames;
+            bool behind = false;
             bool preview = previewWnd != IntPtr.Zero && DateTime.Now < previewUntil;
             if (preview)
             {
@@ -139,9 +169,16 @@ namespace ControlCenterK
                 previewWnd = IntPtr.Zero;
                 wnd = GetForegroundWindow();
                 GetWindowThreadProcessId(wnd, out pid);
+                // ControlCenterK au premier plan (réglages en cours) : l'affichage reste sur le jeu, derrière
+                if (pid == SelfPid)
+                {
+                    var game = GameWindow();
+                    if (game != IntPtr.Zero) { wnd = game; GetWindowThreadProcessId(wnd, out pid); behind = true; }
+                }
                 bool watched;
                 lock (AppConfig.Sync) watched = pid > 0 && F.Apps.Contains(NameOf(pid));
                 if (!watched || IsIconic(wnd)) { Hide(); return; }
+                if (!behind) lastGame = wnd;
                 // toutes les instances du programme : certains (navigateurs, Electron…) affichent depuis un processus annexe
                 string name = NameOf(pid);
                 int fg = pid;
@@ -152,8 +189,10 @@ namespace ControlCenterK
             }
             if (pid != trackedPid) { samples.Clear(); trackedPid = pid; }
             samples.Add(frames);
-            int keep;
-            lock (AppConfig.Sync) keep = F.GraphSeconds * PerSecond;
+            // apparence : propre au programme si elle existe, sinon réglages par défaut
+            FpsLook look;
+            lock (AppConfig.Sync) look = F.LookFor(preview ? previewApp : NameOf(pid)).Clone();
+            int keep = look.GraphSeconds * PerSecond;
             if (samples.Count > keep) samples.RemoveRange(0, samples.Count - keep);
 
             int fps;
@@ -170,9 +209,7 @@ namespace ControlCenterK
             var area = ClientOnScreen(wnd);
             if (area.Width <= 0 || area.Height <= 0) { Hide(); return; }
             if (overlay == null) overlay = new FpsOverlay();
-            FpsConfig look;
-            lock (AppConfig.Sync) look = Copy(F);
-            overlay.Render(fps, samples, keep, look, area);
+            overlay.Render(fps, samples, keep, look, area, behind ? wnd : IntPtr.Zero);
         }
 
         static void Hide()
@@ -183,11 +220,6 @@ namespace ControlCenterK
             samples.Clear();
         }
 
-        static FpsConfig Copy(FpsConfig f)
-        {
-            return new FpsConfig { Color = f.Color, Size = f.Size, Corner = f.Corner, OffsetX = f.OffsetX, OffsetY = f.OffsetY,
-                Graph = f.Graph, GraphSeconds = f.GraphSeconds, Background = f.Background };
-        }
     }
 
     /// <summary>Fenêtre transparente, toujours au premier plan et non cliquable (les clics vont au jeu).</summary>
@@ -224,7 +256,13 @@ namespace ControlCenterK
         [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [StructLayout(LayoutKind.Sequential, Pack = 1)] struct BLEND { public byte Op, Flags, Alpha, Format; }
 
-        public void Render(int fps, List<int> samples, int capacity, FpsConfig f, Rectangle area)
+        [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+
+        /// <summary>
+        /// Dessine l'affichage. "behind" : fenêtre du jeu quand il est en arrière-plan ; l'affichage est alors posé
+        /// juste au-dessus de lui (sous ControlCenterK) au lieu d'être au premier plan.
+        /// </summary>
+        public void Render(int fps, List<int> samples, int capacity, FpsLook f, Rectangle area, IntPtr behind)
         {
             using (var bmp = Draw(fps, samples, capacity, f))
             {
@@ -234,11 +272,20 @@ namespace ControlCenterK
             }
             if (!Visible) Show();
             // reste au-dessus du jeu (certains jeux repassent devant)
-            SetWindowPos(Handle, new IntPtr(-1) /* HWND_TOPMOST */, 0, 0, 0, 0, 0x1 | 0x2 | 0x10 /* NOSIZE | NOMOVE | NOACTIVATE */);
+            const uint flags = 0x1 | 0x2 | 0x10; // NOSIZE | NOMOVE | NOACTIVATE
+            if (behind == IntPtr.Zero) SetWindowPos(Handle, new IntPtr(-1) /* HWND_TOPMOST */, 0, 0, 0, 0, flags);
+            else
+            {
+                SetWindowPos(Handle, new IntPtr(-2) /* HWND_NOTOPMOST */, 0, 0, 0, 0, flags);
+                // juste au-dessus du jeu : on se place sous la fenêtre qui le précède
+                IntPtr above = GetWindow(behind, 3 /* GW_HWNDPREV */);
+                if (above == Handle) return;
+                SetWindowPos(Handle, above == IntPtr.Zero ? IntPtr.Zero /* HWND_TOP */ : above, 0, 0, 0, 0, flags);
+            }
         }
 
         /// <summary>Image de l'affichage : nombre de FPS, et courbe en dessous. Largeur fixe (3 chiffres) pour ne pas bouger.</summary>
-        public static Bitmap Draw(int fps, List<int> samples, int capacity, FpsConfig f)
+        public static Bitmap Draw(int fps, List<int> samples, int capacity, FpsLook f)
         {
             float px = f.Size * 96f / 72f * Theme.S(100) / 100f;          // taille du nombre en pixels (suit l'échelle d'affichage)
             var color = Theme.FromHex(f.Color, Color.Lime);

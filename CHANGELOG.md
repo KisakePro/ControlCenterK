@@ -2,6 +2,13 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.6.2] - 2026-10-13
+
+- FPS : réglages par défaut et, au besoin, réglages propres à un programme (couleur, taille, coin, décalages,
+  courbe, fond) : « Réglages de » dans la carte Apparence, ou le bouton de chaque programme.
+- FPS : l'affichage reste visible sur le jeu en arrière-plan pendant les réglages dans ControlCenterK,
+  sans passer par-dessus la fenêtre de réglage ; les changements s'y voient en direct.
+
 ## [0.6.1] - 2026-10-13
 
 - FPS : valeur stable et exacte. Les images sont comptées selon leur horodatage Windows et non plus à leur arrivée
