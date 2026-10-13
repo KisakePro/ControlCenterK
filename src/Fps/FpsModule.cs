@@ -28,6 +28,7 @@ namespace ControlCenterK
         static IntPtr previewWnd;
         static DateTime previewUntil;
         static int previewTick;
+        static string previewApp; // apparence montrée par l'aperçu (null : réglages par défaut)
 
         public static bool Running { get; private set; }
         public static event Action Changed;
@@ -75,9 +76,10 @@ namespace ControlCenterK
         }
 
         /// <summary>Montre l'affichage quelques secondes sur une fenêtre (valeurs simulées), pour régler l'apparence.</summary>
-        public static void Preview(IntPtr wnd)
+        public static void Preview(IntPtr wnd, string app)
         {
             previewWnd = wnd;
+            previewApp = app;
             previewUntil = DateTime.Now.AddSeconds(6);
             previewTick = 0;
             samples.Clear();
@@ -152,8 +154,10 @@ namespace ControlCenterK
             }
             if (pid != trackedPid) { samples.Clear(); trackedPid = pid; }
             samples.Add(frames);
-            int keep;
-            lock (AppConfig.Sync) keep = F.GraphSeconds * PerSecond;
+            // apparence : propre au programme si elle existe, sinon réglages par défaut
+            FpsLook look;
+            lock (AppConfig.Sync) look = F.LookFor(preview ? previewApp : NameOf(pid)).Clone();
+            int keep = look.GraphSeconds * PerSecond;
             if (samples.Count > keep) samples.RemoveRange(0, samples.Count - keep);
 
             int fps;
@@ -170,8 +174,6 @@ namespace ControlCenterK
             var area = ClientOnScreen(wnd);
             if (area.Width <= 0 || area.Height <= 0) { Hide(); return; }
             if (overlay == null) overlay = new FpsOverlay();
-            FpsConfig look;
-            lock (AppConfig.Sync) look = Copy(F);
             overlay.Render(fps, samples, keep, look, area);
         }
 
@@ -183,11 +185,6 @@ namespace ControlCenterK
             samples.Clear();
         }
 
-        static FpsConfig Copy(FpsConfig f)
-        {
-            return new FpsConfig { Color = f.Color, Size = f.Size, Corner = f.Corner, OffsetX = f.OffsetX, OffsetY = f.OffsetY,
-                Graph = f.Graph, GraphSeconds = f.GraphSeconds, Background = f.Background };
-        }
     }
 
     /// <summary>Fenêtre transparente, toujours au premier plan et non cliquable (les clics vont au jeu).</summary>
@@ -224,7 +221,7 @@ namespace ControlCenterK
         [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
         [StructLayout(LayoutKind.Sequential, Pack = 1)] struct BLEND { public byte Op, Flags, Alpha, Format; }
 
-        public void Render(int fps, List<int> samples, int capacity, FpsConfig f, Rectangle area)
+        public void Render(int fps, List<int> samples, int capacity, FpsLook f, Rectangle area)
         {
             using (var bmp = Draw(fps, samples, capacity, f))
             {
@@ -238,7 +235,7 @@ namespace ControlCenterK
         }
 
         /// <summary>Image de l'affichage : nombre de FPS, et courbe en dessous. Largeur fixe (3 chiffres) pour ne pas bouger.</summary>
-        public static Bitmap Draw(int fps, List<int> samples, int capacity, FpsConfig f)
+        public static Bitmap Draw(int fps, List<int> samples, int capacity, FpsLook f)
         {
             float px = f.Size * 96f / 72f * Theme.S(100) / 100f;          // taille du nombre en pixels (suit l'échelle d'affichage)
             var color = Theme.FromHex(f.Color, Color.Lime);

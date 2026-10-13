@@ -16,6 +16,8 @@ namespace ControlCenterK
         Card statusCard;
 
         FpsConfig F { get { return cfg.Fps; } }
+        /// <summary>Programme dont on modifie l'apparence (null : réglages par défaut).</summary>
+        string editing;
 
         public FpsPage(AppConfig cfg)
         {
@@ -213,7 +215,14 @@ namespace ControlCenterK
                 var del = new FlatButton("Retirer") { Anchor = AnchorStyles.Top | AnchorStyles.Right };
                 del.FitWidth();
                 del.Location = new Point(row.Width - del.Width - Theme.S(8), Theme.S(6));
-                del.Click += (s, e) => { lock (AppConfig.Sync) F.Apps.Remove(a); Save(); Rebuild(); };
+                del.Click += (s, e) => { lock (AppConfig.Sync) { F.Apps.Remove(a); F.Custom.Remove(a); } Save(); Rebuild(); };
+                bool own;
+                lock (AppConfig.Sync) own = F.Custom.ContainsKey(a);
+                var edit = new FlatButton(own ? "Réglages propres" : "Réglages par défaut") { Glyph = Glyphs.Settings, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                edit.FitWidth();
+                edit.Location = new Point(del.Left - edit.Width - Theme.S(8), Theme.S(6));
+                edit.Click += (s, e) => { editing = a; Rebuild(); };
+                row.Controls.Add(edit);
                 row.Controls.AddRange(new Control[] { icon, name, exe, del });
                 c.Controls.Add(row);
                 y += Theme.S(50);
@@ -256,7 +265,8 @@ namespace ControlCenterK
 
         Card LookCard()
         {
-            var c = NewCard("Apparence", "Couleur, taille et emplacement de l'affichage, mesuré depuis un coin de la fenêtre du jeu.");
+            var c = NewCard("Apparence", "Couleur, taille et emplacement de l'affichage, mesuré depuis un coin de la fenêtre du jeu. " +
+                "Les réglages par défaut valent pour tous les programmes, sauf ceux qui ont leurs propres réglages.");
             var prev = new FlatButton("Aperçu (6 s)", true) { Glyph = "", Anchor = AnchorStyles.Top | AnchorStyles.Right };
             prev.FitWidth();
             prev.Location = new Point(c.Width - prev.Width - Theme.S(20), Theme.S(14));
@@ -264,12 +274,46 @@ namespace ControlCenterK
             {
                 if (!FpsModule.Running) return;
                 var f = FindForm();
-                if (f != null) FpsModule.Preview(f.Handle);
+                if (f != null) FpsModule.Preview(f.Handle, editing);
             };
             c.Controls.Add(prev);
 
+            // réglages modifiés : par défaut, ou ceux d'un programme de la liste
+            List<string> apps;
+            lock (AppConfig.Sync) apps = new List<string>(F.Apps);
+            if (editing != null && !apps.Contains(editing)) editing = null;
+            var target = new DropButton { Width = Theme.S(260) };
+            target.Add("", "Réglages par défaut");
+            foreach (var app in apps) target.Add(app, Catalog.Describe(app, null) + " (" + app + ".exe)");
+            target.Value = editing ?? "";
+            target.ValueChanged += (s, e) => { editing = target.Value.Length == 0 ? null : target.Value; Rebuild(); };
+            Row(c, "Réglages de", "Choisissez un programme pour lui donner un emplacement ou une apparence différente.", target);
+
+            FpsLook L;
+            if (editing == null) L = F;
+            else
+            {
+                string app = editing;
+                bool own;
+                lock (AppConfig.Sync) own = F.Custom.ContainsKey(app);
+                var tg = new Toggle { Checked = own };
+                tg.CheckedChanged += (s, e) =>
+                {
+                    lock (AppConfig.Sync)
+                    {
+                        if (tg.Checked) F.Custom[app] = F.Clone(); // part des réglages par défaut
+                        else F.Custom.Remove(app);
+                    }
+                    Save();
+                    Rebuild();
+                };
+                Row(c, "Réglages propres à ce programme", own ? "Les réglages ci-dessous ne valent que pour ce programme." : "Désactivé : ce programme utilise les réglages par défaut.", tg);
+                if (!own) return c;
+                lock (AppConfig.Sync) L = F.Custom[app];
+            }
+
             var color = new Button { FlatStyle = FlatStyle.Flat, Size = new Size(Theme.S(44), Theme.S(28)), Cursor = Cursors.Hand };
-            lock (AppConfig.Sync) color.BackColor = Theme.FromHex(F.Color, Color.Lime);
+            lock (AppConfig.Sync) color.BackColor = Theme.FromHex(L.Color, Color.Lime);
             color.FlatAppearance.BorderColor = Theme.Border;
             color.Click += (s, e) =>
             {
@@ -277,35 +321,35 @@ namespace ControlCenterK
                     if (dlg.ShowDialog(FindForm()) == DialogResult.OK)
                     {
                         color.BackColor = dlg.Color;
-                        lock (AppConfig.Sync) F.Color = Theme.ToHex(dlg.Color);
+                        lock (AppConfig.Sync) L.Color = Theme.ToHex(dlg.Color);
                         Save();
                     }
             };
             Row(c, "Couleur", "Du nombre et de la courbe.", color);
 
             Row(c, "Taille", null, Drop(Theme.S(200), new[] { 10, 12, 14, 16, 18, 22, 26, 32, 40, 48 }, v => v + " pt" + (v == 18 ? " (par défaut)" : ""),
-                () => F.Size, v => F.Size = v));
+                () => L.Size, v => L.Size = v));
 
             var corner = new DropButton { Width = Theme.S(200) };
             corner.Add("tl", "En haut à gauche");
             corner.Add("tr", "En haut à droite");
             corner.Add("bl", "En bas à gauche");
             corner.Add("br", "En bas à droite");
-            lock (AppConfig.Sync) corner.Value = F.Corner;
-            corner.ValueChanged += (s, e) => { lock (AppConfig.Sync) F.Corner = corner.Value; Save(); };
+            lock (AppConfig.Sync) corner.Value = L.Corner;
+            corner.ValueChanged += (s, e) => { lock (AppConfig.Sync) L.Corner = corner.Value; Save(); };
             Row(c, "Emplacement", null, corner);
 
             var offsets = new[] { 0, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512 };
-            Row(c, "Décalage horizontal", "Distance au bord gauche ou droit de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => F.OffsetX, v => F.OffsetX = v));
-            Row(c, "Décalage vertical", "Distance au bord haut ou bas de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => F.OffsetY, v => F.OffsetY = v));
+            Row(c, "Décalage horizontal", "Distance au bord gauche ou droit de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => L.OffsetX, v => L.OffsetX = v));
+            Row(c, "Décalage vertical", "Distance au bord haut ou bas de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => L.OffsetY, v => L.OffsetY = v));
 
             var graph = new Toggle();
-            lock (AppConfig.Sync) graph.Checked = F.Graph;
-            graph.CheckedChanged += (s, e) => { lock (AppConfig.Sync) F.Graph = graph.Checked; Save(); };
+            lock (AppConfig.Sync) graph.Checked = L.Graph;
+            graph.CheckedChanged += (s, e) => { lock (AppConfig.Sync) L.Graph = graph.Checked; Save(); };
             Row(c, "Courbe des FPS", "Sous le nombre : les chutes d'images y apparaissent en creux.", graph);
 
-            Row(c, "Durée de la courbe", null, Drop(Theme.S(200), new[] { 5, 10, 20, 30, 60 }, v => v + " secondes", () => F.GraphSeconds, v => F.GraphSeconds = v));
-            Row(c, "Opacité du fond", null, Drop(Theme.S(200), new[] { 0, 25, 40, 55, 70, 85, 100 }, v => v == 0 ? "Sans fond" : v + " %", () => F.Background, v => F.Background = v));
+            Row(c, "Durée de la courbe", null, Drop(Theme.S(200), new[] { 5, 10, 20, 30, 60 }, v => v + " secondes", () => L.GraphSeconds, v => L.GraphSeconds = v));
+            Row(c, "Opacité du fond", null, Drop(Theme.S(200), new[] { 0, 25, 40, 55, 70, 85, 100 }, v => v == 0 ? "Sans fond" : v + " %", () => L.Background, v => L.Background = v));
             return c;
         }
 
