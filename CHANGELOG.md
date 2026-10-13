@@ -2,6 +2,11 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.6.1] - 2026-10-13
+
+- FPS : valeur stable et exacte. Les images sont comptées selon leur horodatage Windows et non plus à leur arrivée
+  (qui se fait par paquets) : un jeu bloqué à 75 FPS affiche bien 75 au lieu d'osciller entre 50 et 93.
+
 ## [0.6] - 2026-10-10
 
 - Nouveau module « FPS » : images par seconde affichées par-dessus les programmes choisis, avec une courbe pour repérer
