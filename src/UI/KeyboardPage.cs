@@ -83,12 +83,13 @@ namespace ControlCenterK
             var dev = KeyboardModule.Device;
             D = dev != null ? KeyboardModule.DeviceConfig : null;
             cards.Add(DetectedCard(dev));
+            if (dev != null && D != null) cards.Add(LightCard(dev));
+            cards.Add(MacroCard());
+            // périphériques non connectés ou masqués : en bas de la page
             var saved = SavedCard();
             if (saved != null) cards.Add(saved);
             var hidden = HiddenCard();
             if (hidden != null) cards.Add(hidden);
-            if (dev != null && D != null) cards.Add(LightCard(dev));
-            cards.Add(MacroCard());
             foreach (var c in cards) scroll.Controls.Add(c);
             LayoutCards();
             scroll.ResumeLayout();

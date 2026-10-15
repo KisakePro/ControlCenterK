@@ -67,10 +67,6 @@ namespace ControlCenterK
             D = MouseModule.DeviceConfig;
             if (dev == null) D = null;
             cards.Add(DetectedCard(dev));
-            var saved = SavedCard();
-            if (saved != null) cards.Add(saved);
-            var hidden = HiddenCard();
-            if (hidden != null) cards.Add(hidden);
             if (dev != null && D != null)
             {
                 cards.Add(DeviceCard(dev));
@@ -79,6 +75,11 @@ namespace ControlCenterK
             }
             cards.Add(ButtonsCard(dev));
             cards.Add(WindowsCard());
+            // périphériques non connectés ou masqués : en bas de la page
+            var saved = SavedCard();
+            if (saved != null) cards.Add(saved);
+            var hidden = HiddenCard();
+            if (hidden != null) cards.Add(hidden);
             foreach (var c in cards) scroll.Controls.Add(c);
             LayoutCards();
             scroll.ResumeLayout();
