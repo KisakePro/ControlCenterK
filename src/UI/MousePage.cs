@@ -69,6 +69,8 @@ namespace ControlCenterK
             cards.Add(DetectedCard(dev));
             var saved = SavedCard();
             if (saved != null) cards.Add(saved);
+            var hidden = HiddenCard();
+            if (hidden != null) cards.Add(hidden);
             if (dev != null && D != null)
             {
                 cards.Add(DeviceCard(dev));
@@ -216,10 +218,23 @@ namespace ControlCenterK
                     pick.Click += (s, e) => MouseModule.Select(key);
                     row.Controls.Add(pick);
                 }
+                string hk = m.Key, hn = m.Name;
+                var pickBtn = row.Controls.Count > 3 ? row.Controls[3] : null;
+                SavedDevices.HideButton(row, hn, "souris", () => MouseModule.Hide(hk, hn), pickBtn == null ? 0 : pickBtn.Width + Theme.S(8));
                 c.Controls.Add(row);
                 y += Theme.S(50);
             }
             SetNextY(c, y);
+            return c;
+        }
+
+        Card HiddenCard()
+        {
+            List<KeyValuePair<string, string>> items;
+            lock (AppConfig.Sync) items = new List<KeyValuePair<string, string>>(M.Ignored);
+            if (items.Count == 0) return null;
+            var c = NewCard("Souris masquées", "Supprimées de la liste : elles ne sont ni affichées ni pilotées, même branchées.");
+            SetNextY(c, SavedDevices.FillHidden(c, NextY(c), items, Glyphs.Mouse, MouseModule.Unhide));
             return c;
         }
 

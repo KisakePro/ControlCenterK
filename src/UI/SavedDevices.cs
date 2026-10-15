@@ -8,6 +8,48 @@ namespace ControlCenterK
     /// <summary>Liste des périphériques enregistrés mais débranchés, avec suppression confirmée de leurs réglages.</summary>
     static class SavedDevices
     {
+        /// <summary>Bouton « Supprimer » d'un périphérique branché : demande confirmation puis le masque.</summary>
+        public static FlatButton HideButton(Card row, string name, string kind, Action hide, int rightOffset)
+        {
+            var del = new FlatButton("Supprimer") { Glyph = Glyphs.Close, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            del.FitWidth();
+            del.Location = new Point(row.Width - rightOffset - del.Width - Theme.S(8), Theme.S(6));
+            del.Click += (s, e) =>
+            {
+                if (MessageBox.Show(row.FindForm(), "Supprimer « " + name + " » de la liste ?\n\nIl ne sera plus détecté ni piloté, et ses réglages seront effacés. " +
+                        "Vous pourrez le rétablir dans « Périphériques masqués ».",
+                        "Supprimer le " + kind, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes)
+                    hide();
+            };
+            row.Controls.Add(del);
+            return del;
+        }
+
+        /// <summary>Lignes des périphériques masqués, avec « Rétablir » ; renvoie le Y suivant.</summary>
+        public static int FillHidden(Card c, int y, List<KeyValuePair<string, string>> items, string glyph, Action<string> restore)
+        {
+            foreach (var it in items)
+            {
+                string key = it.Key;
+                var row = new Card { BackColor = Theme.Surface, Radius = 6,
+                    Bounds = new Rectangle(Theme.S(14), y, c.Width - Theme.S(28), Theme.S(44)), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+                var icon = Theme.Label(glyph, Theme.Icon(12f), Theme.Dim, row.BackColor);
+                icon.Location = new Point(Theme.S(12), Theme.S(13));
+                var lName = Theme.Label(string.IsNullOrEmpty(it.Value) ? key : it.Value, Theme.Semi(10f), Theme.Muted, row.BackColor);
+                lName.Location = new Point(Theme.S(42), Theme.S(5));
+                var st = Theme.Label("Masqué · " + key, Theme.Ui(8.5f), Theme.Dim, row.BackColor);
+                st.Location = new Point(Theme.S(42), Theme.S(24));
+                var back = new FlatButton("Rétablir") { Glyph = Glyphs.Refresh, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                back.FitWidth();
+                back.Location = new Point(row.Width - back.Width - Theme.S(8), Theme.S(6));
+                back.Click += (s, e) => restore(key);
+                row.Controls.AddRange(new Control[] { icon, lName, st, back });
+                c.Controls.Add(row);
+                y += Theme.S(50);
+            }
+            return y;
+        }
+
         /// <summary>Ajoute une ligne par périphérique (clé "vid:pid" → nom) et renvoie le Y suivant.</summary>
         public static int Fill(Card c, int y, List<KeyValuePair<string, string>> items, string glyph, string kind, Action<string> remove)
         {

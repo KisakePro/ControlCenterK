@@ -43,6 +43,8 @@ namespace ControlCenterK
         public Dictionary<string, KeyboardDeviceConfig> Devices { get; set; }
         /// <summary>Clavier piloté quand plusieurs claviers réglables sont branchés ("vid:pid").</summary>
         public string Selected { get; set; }
+        /// <summary>Claviers masqués par l'utilisateur ("vid:pid" → nom) : ni listés ni pilotés.</summary>
+        public Dictionary<string, string> Ignored { get; set; }
         /// <summary>Macros : "key:xx" (code HID) → action. Valables pour tous les claviers.</summary>
         public Dictionary<string, MouseAction> Macros { get; set; }
         /// <summary>Palette de couleurs à glisser sur les touches.</summary>
@@ -73,6 +75,7 @@ namespace ControlCenterK
         {
             if (Devices == null) Devices = new Dictionary<string, KeyboardDeviceConfig>();
             if (Macros == null) Macros = new Dictionary<string, MouseAction>();
+            if (Ignored == null) Ignored = new Dictionary<string, string>();
             if (Palette == null) Palette = DefaultPalette();
             foreach (var d in Devices.Values) if (d != null) d.Fix();
             foreach (var k in new List<string>(Macros.Keys)) if (Macros[k] == null) Macros.Remove(k);
