@@ -87,6 +87,8 @@ namespace ControlCenterK
             // FPS : mesure ETW et affichage par-dessus les programmes choisis
             if (Cfg.ModFps && !FpsModule.Running) FpsModule.Start(Cfg);
             else if (!Cfg.ModFps && FpsModule.Running) FpsModule.Stop();
+            // Partage d'écran : rien ne tourne tant qu'aucune zone n'est partagée
+            if (!Cfg.ModShare && ScreenShare.Streaming) ScreenShare.Stop();
 
             var h = ModulesChanged;
             if (h != null) h();
@@ -112,6 +114,7 @@ namespace ControlCenterK
             if (MouseModule.Running) MouseModule.Stop(); // remet la souris en mode matériel
             if (KeyboardModule.Running) KeyboardModule.Stop(); // rend l'éclairage au clavier
             if (FpsModule.Running) FpsModule.Stop(); // ferme la session de mesure
+            if (ScreenShare.Streaming) ScreenShare.Stop(); // libère la caméra virtuelle
             if (Router != null) { Engine.Router = null; Router.Dispose(); Router = null; }
             VirtualHost.Stop();
         }

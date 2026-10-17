@@ -343,7 +343,9 @@ namespace ControlCenterK
                 cfg.ModKeyboard, v => cfg.ModKeyboard = v);
             AddModule(Theme.S(70) + 4 * Theme.S(66), Glyphs.Fps, "FPS", "Images par seconde et leur courbe affichées par-dessus les jeux choisis (droits administrateur).",
                 cfg.ModFps, v => cfg.ModFps = v);
-            modCard.Height = Theme.S(70) + 5 * Theme.S(66) + Theme.S(8);
+            AddModule(Theme.S(70) + 5 * Theme.S(66), Glyphs.Share, "Partage d'écran", "Partage une zone de l'écran sur Discord comme une webcam, via une caméra virtuelle (anciennement KStS).",
+                cfg.ModShare, v => cfg.ModShare = v);
+            modCard.Height = Theme.S(70) + 6 * Theme.S(66) + Theme.S(8);
         }
 
         void AddModule(int y, string glyph, string label, string desc, bool value, Action<bool> apply)
