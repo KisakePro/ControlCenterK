@@ -84,6 +84,8 @@ namespace ControlCenterK
         public Dictionary<string, MouseDeviceConfig> Devices { get; set; }
         /// <summary>Souris pilotée quand plusieurs souris réglables sont branchées ("vid:pid").</summary>
         public string Selected { get; set; }
+        /// <summary>Souris masquées par l'utilisateur ("vid:pid" → nom) : ni listées ni pilotées.</summary>
+        public Dictionary<string, string> Ignored { get; set; }
 
         // Anciens champs (jusqu'à la version 0.3 : une seule souris Corsair) : repris dans Devices au chargement
         public bool Imported { get; set; }
@@ -121,6 +123,7 @@ namespace ControlCenterK
         public void Fix()
         {
             if (Devices == null) Devices = new Dictionary<string, MouseDeviceConfig>();
+            if (Ignored == null) Ignored = new Dictionary<string, string>();
             // migration : les réglages de l'unique souris Corsair (Nightsword) deviennent ceux du modèle 1b1c:1b5c
             if (Devices.Count == 0 && Stages != null && Stages.Count > 0)
             {

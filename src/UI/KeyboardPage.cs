@@ -83,10 +83,13 @@ namespace ControlCenterK
             var dev = KeyboardModule.Device;
             D = dev != null ? KeyboardModule.DeviceConfig : null;
             cards.Add(DetectedCard(dev));
-            var saved = SavedCard();
-            if (saved != null) cards.Add(saved);
             if (dev != null && D != null) cards.Add(LightCard(dev));
             cards.Add(MacroCard());
+            // périphériques non connectés ou masqués : en bas de la page
+            var saved = SavedCard();
+            if (saved != null) cards.Add(saved);
+            var hidden = HiddenCard();
+            if (hidden != null) cards.Add(hidden);
             foreach (var c in cards) scroll.Controls.Add(c);
             LayoutCards();
             scroll.ResumeLayout();
@@ -165,6 +168,16 @@ namespace ControlCenterK
 
         #region Cartes
 
+        Card HiddenCard()
+        {
+            List<KeyValuePair<string, string>> items;
+            lock (AppConfig.Sync) items = new List<KeyValuePair<string, string>>(K.Ignored);
+            if (items.Count == 0) return null;
+            var c = NewCard("Claviers masqués", "Supprimés de la liste : ils ne sont ni affichés ni pilotés, même branchés.");
+            SetNextY(c, SavedDevices.FillHidden(c, NextY(c), items, Glyphs.Keyboard, KeyboardModule.Unhide));
+            return c;
+        }
+
         Card SavedCard()
         {
             var connected = new HashSet<string>();
@@ -227,6 +240,9 @@ namespace ControlCenterK
                     pick.Click += (s, e) => KeyboardModule.Select(key);
                     row.Controls.Add(pick);
                 }
+                string hk = m.Key, hn = m.Name;
+                var pickBtn = row.Controls.Count > 3 ? row.Controls[3] : null;
+                SavedDevices.HideButton(row, hn, "clavier", () => KeyboardModule.Hide(hk, hn), pickBtn == null ? 0 : pickBtn.Width + Theme.S(8));
                 c.Controls.Add(row);
                 y += Theme.S(50);
             }

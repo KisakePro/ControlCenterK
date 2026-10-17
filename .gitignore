@@ -10,3 +10,6 @@ dist/
 *.user
 Thumbs.db
 desktop.ini
+
+# Utilitaires d origine (exécutables volumineux)
+Others/

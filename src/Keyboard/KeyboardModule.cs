@@ -87,6 +87,7 @@ namespace ControlCenterK
                 {
                     var all = Hid.Enumerate(null);
                     var boards = KeyboardDetect.List(all);
+                    lock (AppConfig.Sync) boards.RemoveAll(b => K.Ignored.ContainsKey(b.Key));
                     bool same = boards.Count == detected.Count && boards.TrueForAll(b => detected.Exists(d => d.Key == b.Key));
                     if (same && probed && (dev == null || dev.Alive())) return;
                     Disconnect();
@@ -118,6 +119,29 @@ namespace ControlCenterK
             d.Dispose();
             dev = null;
             dc = null;
+        }
+
+        /// <summary>Masque un clavier (même branché) : retiré de la liste, plus piloté, réglages effacés.</summary>
+        public static void Hide(string key, string name)
+        {
+            lock (AppConfig.Sync)
+            {
+                K.Ignored[key] = name;
+                K.Devices.Remove(key);
+                if (K.Selected == key) K.Selected = null;
+            }
+            cfg.Save();
+            lock (gate) { Disconnect(); probed = false; }
+            Rescan(0);
+        }
+
+        /// <summary>Rétablit un clavier masqué : il est de nouveau détecté (avec des réglages neufs).</summary>
+        public static void Unhide(string key)
+        {
+            lock (AppConfig.Sync) K.Ignored.Remove(key);
+            cfg.Save();
+            lock (gate) { Disconnect(); probed = false; }
+            Rescan(0);
         }
 
         public static void Select(string key)

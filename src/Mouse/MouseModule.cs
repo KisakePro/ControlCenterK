@@ -93,6 +93,7 @@ namespace ControlCenterK
                 {
                     var all = Hid.Enumerate(null);
                     var mice = MouseDetect.List(all);
+                    lock (AppConfig.Sync) mice.RemoveAll(m => M.Ignored.ContainsKey(m.Key));
                     bool sameMice = mice.Count == detected.Count && mice.TrueForAll(m => detected.Exists(d => d.Key == m.Key));
                     // mêmes souris qu'au dernier passage et souris pilotée toujours là : rien à faire
                     if (sameMice && probed && (dev == null || dev.Alive())) return;
@@ -135,6 +136,29 @@ namespace ControlCenterK
             d.Dispose();
             dev = null;
             dc = null;
+        }
+
+        /// <summary>Masque un souris (même branché) : retiré de la liste, plus piloté, réglages effacés.</summary>
+        public static void Hide(string key, string name)
+        {
+            lock (AppConfig.Sync)
+            {
+                M.Ignored[key] = name;
+                M.Devices.Remove(key);
+                if (M.Selected == key) M.Selected = null;
+            }
+            cfg.Save();
+            lock (gate) { Disconnect(); probed = false; }
+            Rescan(0);
+        }
+
+        /// <summary>Rétablit un souris masqué : il est de nouveau détecté (avec des réglages neufs).</summary>
+        public static void Unhide(string key)
+        {
+            lock (AppConfig.Sync) M.Ignored.Remove(key);
+            cfg.Save();
+            lock (gate) { Disconnect(); probed = false; }
+            Rescan(0);
         }
 
         /// <summary>Choisit la souris à piloter quand plusieurs souris réglables sont branchées.</summary>
