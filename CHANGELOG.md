@@ -2,6 +2,15 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.7] - 2026-10-17 (BETA)
+
+- Nouveau module « Partage d'écran » (ancien utilitaire KStS) : une zone de l'écran envoyée en direct dans la caméra
+  virtuelle « KStS Virtual Screen », pour la partager sur Discord comme une webcam (1920 × 1080, 30 images/s, curseur).
+  Installation de la caméra en un clic (module caméra virtuelle d'OBS, GPL), zone choisie à la souris ou par
+  coordonnées, cadre rouge hors capture, explication pas à pas.
+- Souris et clavier : un périphérique branché peut être supprimé de la liste (masqué, réglages effacés) et rétabli.
+- Souris et clavier : périphériques non connectés et masqués regroupés en bas de la page.
+
 ## [0.6.2] - 2026-10-13
 
 - FPS : réglages par défaut et, au besoin, réglages propres à un programme (couleur, taille, coin, décalages,
