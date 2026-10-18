@@ -268,6 +268,7 @@ namespace ControlCenterK
             if (Fps == null) Fps = new FpsConfig();
             Fps.Fix();
             if (Share == null) Share = new ShareConfig();
+            Share.Fix();
             if (Router == null) Router = new RouterConfig();
             Router.Fix();
             if (Theme == null) Theme = new ThemeDef { Name = "Bleu nuit", Accent = "#4C8DFF", Base = "#AAB4E1", Intensity = 1 };

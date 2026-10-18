@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -9,16 +10,59 @@ using Microsoft.Win32;
 
 namespace ControlCenterK
 {
-    /// <summary>Réglages du module « Partage d'écran » (KStS).</summary>
-    public class ShareConfig
+    /// <summary>Zone d'écran enregistrée : nom, position (pixels physiques) et couleur de son cadre.</summary>
+    public class ShareZone
     {
+        public string Id { get; set; }
+        public string Name { get; set; }
         public int X { get; set; }
         public int Y { get; set; }
         public int W { get; set; }
         public int H { get; set; }
-        public bool Border { get; set; }    // cadre rouge autour de la zone partagée
+        public string Color { get; set; }
 
-        public ShareConfig() { Border = true; }
+        public Rectangle Rect { get { return new Rectangle(X, Y, W, H); } }
+    }
+
+    /// <summary>Réglages du module « Partage d'écran » (KStS).</summary>
+    public class ShareConfig
+    {
+        public List<ShareZone> Zones { get; set; }
+        public bool Border { get; set; }    // cadre autour de la zone partagée
+        public bool ShowAll { get; set; }   // cadres de toutes les zones enregistrées, chacune dans sa couleur
+        public bool HotKeys { get; set; }   // raccourcis Ctrl+Alt+F1…F10
+        // ancienne zone unique (0.7) : reprise comme « Zone 1 »
+        public int X { get; set; }
+        public int Y { get; set; }
+        public int W { get; set; }
+        public int H { get; set; }
+
+        public static readonly string[] Palette = { "#FF3B30", "#34C759", "#0A84FF", "#FFCC00", "#AF52DE", "#FF9500", "#5AC8FA", "#FF2D92", "#FFFFFF" };
+
+        public ShareConfig() { Border = true; HotKeys = true; Zones = new List<ShareZone>(); }
+
+        public void Fix()
+        {
+            if (Zones == null) Zones = new List<ShareZone>();
+            if (Zones.Count == 0 && W >= 16 && H >= 16) Zones.Add(new ShareZone { Name = "Zone 1", X = X, Y = Y, W = W, H = H, Color = Palette[0] });
+            W = H = 0;
+            Zones.RemoveAll(z => z == null || z.W < 16 || z.H < 16);
+            foreach (var z in Zones)
+            {
+                if (string.IsNullOrEmpty(z.Id)) z.Id = Guid.NewGuid().ToString("N").Substring(0, 8);
+                if (string.IsNullOrEmpty(z.Name)) z.Name = "Zone";
+                if (string.IsNullOrEmpty(z.Color)) z.Color = Palette[0];
+            }
+        }
+
+        /// <summary>Couleur proposée pour une nouvelle zone : la première de la palette pas encore prise.</summary>
+        public string NextColor()
+        {
+            foreach (var c in Palette) if (!Zones.Exists(z => string.Equals(z.Color, c, StringComparison.OrdinalIgnoreCase))) return c;
+            return Palette[Zones.Count % Palette.Length];
+        }
+
+        public ShareZone Find(string id) { return Zones.Find(z => z.Id == id); }
     }
 
     /// <summary>
@@ -37,7 +81,6 @@ namespace ControlCenterK
 
         static Thread worker;
         static volatile bool stopping;
-        static BorderFrame border;
 
         public static Rectangle Region { get; private set; }
         public static bool Streaming { get { return worker != null; } }
@@ -140,17 +183,79 @@ namespace ControlCenterK
 
         #region Partage
 
-        /// <summary>Démarre le partage de la zone (coordonnées écran en pixels physiques).</summary>
-        public static void Start(Rectangle region, bool showBorder)
+        static AppConfig cfg;
+        static readonly List<BorderFrame> frames = new List<BorderFrame>();
+        static volatile object pending;     // nouvelle zone à capturer (Rectangle), prise en compte à l'image suivante
+        static HotKeys hotkeys;
+
+        /// <summary>Zone partagée en ce moment (null si aucune ou zone saisie à la main).</summary>
+        public static string ActiveZone { get; private set; }
+
+        static ShareConfig S { get { return cfg.Share; } }
+
+        /// <summary>Module activé : raccourcis Ctrl+Alt+F1…F9 (zones) et Ctrl+Alt+F10 (arrêt), cadres de toutes les zones.</summary>
+        public static void Enable(AppConfig c)
+        {
+            cfg = c;
+            UpdateHotKeys();
+            RefreshFrames();
+        }
+
+        /// <summary>Installe ou retire les raccourcis selon le réglage.</summary>
+        public static void UpdateHotKeys()
+        {
+            bool on;
+            lock (AppConfig.Sync) on = cfg != null && S.HotKeys;
+            if (on && hotkeys == null) hotkeys = new HotKeys(OnHotKey);
+            else if (!on && hotkeys != null) { hotkeys.Dispose(); hotkeys = null; }
+        }
+
+        public static void Disable()
         {
             Stop();
+            if (hotkeys != null) { hotkeys.Dispose(); hotkeys = null; }
+            ClearFrames();
+        }
+
+        static void OnHotKey(int n)
+        {
+            if (n == 0) { Stop(); return; }
+            ShareZone z;
+            lock (AppConfig.Sync) z = n <= S.Zones.Count ? S.Zones[n - 1] : null;
+            if (z != null) ShareSaved(z.Id);
+        }
+
+        /// <summary>Partage une zone enregistrée (bascule à chaud si un partage est déjà en cours).</summary>
+        public static void ShareSaved(string id)
+        {
+            ShareZone z;
+            lock (AppConfig.Sync) z = S.Find(id);
+            if (z == null) return;
+            ActiveZone = id;
+            Share(z.Rect);
+        }
+
+        /// <summary>Partage une zone quelconque (coordonnées écran en pixels physiques).</summary>
+        public static void ShareRect(Rectangle r)
+        {
+            ActiveZone = null;
+            Share(r);
+        }
+
+        static void Share(Rectangle r)
+        {
             Error = null;
-            Region = region;
-            stopping = false;
-            var t = new Thread(() => Run(region)) { IsBackground = true, Name = "Partage d'écran" };
-            worker = t;
-            t.Start();
-            ShowBorder(showBorder);
+            Region = r;
+            if (worker != null) pending = r; // la caméra reste ouverte : Discord ne voit qu'un changement d'image
+            else
+            {
+                stopping = false;
+                pending = null;
+                var t = new Thread(() => Run(r)) { IsBackground = true, Name = "Partage d'écran" };
+                worker = t;
+                t.Start();
+            }
+            RefreshFrames();
             Raise();
         }
 
@@ -163,22 +268,43 @@ namespace ControlCenterK
                 t.Join(3000);
                 worker = null;
             }
-            ShowBorder(false);
+            ActiveZone = null;
+            RefreshFrames();
             Raise();
         }
 
-        public static void ShowBorder(bool show)
+        /// <summary>Redessine les cadres : zone en direct (épais), et toutes les zones si demandé (fins), chacune dans sa couleur.</summary>
+        public static void RefreshFrames()
         {
-            if (border != null) { border.Close(); border.Dispose(); border = null; }
-            if (show && worker != null) border = new BorderFrame(Region);
+            ClearFrames();
+            if (cfg == null) return;
+            bool border, all;
+            List<ShareZone> zones;
+            lock (AppConfig.Sync) { border = S.Border; all = S.ShowAll; zones = new List<ShareZone>(S.Zones); }
+            bool live = worker != null;
+            if (all)
+                foreach (var z in zones)
+                    if (!(live && z.Id == ActiveZone && border)) frames.Add(new BorderFrame(z.Rect, Theme.FromHex(z.Color, Color.Red), 2));
+            if (live && border)
+            {
+                var zone = ActiveZone != null ? zones.Find(z => z.Id == ActiveZone) : null;
+                frames.Add(new BorderFrame(Region, zone != null ? Theme.FromHex(zone.Color, Color.Red) : Color.Red, 3));
+            }
+        }
+
+        static void ClearFrames()
+        {
+            foreach (var f in frames) { f.Close(); f.Dispose(); }
+            frames.Clear();
         }
 
         static void Fail(string message)
         {
             Error = message;
             worker = null;
+            ActiveZone = null;
             var f = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
-            Action a = () => { ShowBorder(false); Raise(); };
+            Action a = () => { RefreshFrames(); Raise(); };
             try { if (f != null) f.BeginInvoke(a); else Raise(); } catch { }
         }
 
@@ -212,18 +338,28 @@ namespace ControlCenterK
             IntPtr screen = GetDC(IntPtr.Zero), mem = CreateCompatibleDC(screen), bits;
             var bi = new BITMAPINFOHEADER { Size = 40, Width = OutW, Height = -OutH, Planes = 1, BitCount = 32 };
             IntPtr dib = CreateDIBSection(mem, ref bi, 0, out bits, IntPtr.Zero, 0), old = SelectObject(mem, dib);
-            double s = Math.Min(OutW / (double)r.Width, OutH / (double)r.Height);
-            int sw = (int)(r.Width * s), sh = (int)(r.Height * s), ox = (OutW - sw) / 2, oy = (OutH - sh) / 2;
-            bool same = sw == r.Width && sh == r.Height;
+            double s = 0;
+            int sw = 0, sh = 0, ox = 0, oy = 0, cursorW = 0, cursorH = 0;
+            bool same = false;
+            Action layout = () =>
+            {
+                s = Math.Min(OutW / (double)r.Width, OutH / (double)r.Height);
+                sw = (int)(r.Width * s); sh = (int)(r.Height * s); ox = (OutW - sw) / 2; oy = (OutH - sh) / 2;
+                same = sw == r.Width && sh == r.Height;
+                cursorW = (int)(GetSystemMetrics(13) * s); cursorH = (int)(GetSystemMetrics(14) * s);
+                for (int i = 0; i < OutW * OutH; i++) ((uint*)bits)[i] = 0xFF000000; // bandes noires
+            };
+            layout();
             SetStretchBltMode(mem, 4 /* HALFTONE */);
             SetBrushOrgEx(mem, 0, 0, IntPtr.Zero);
-            int cursorW = (int)(GetSystemMetrics(13) * s), cursorH = (int)(GetSystemMetrics(14) * s);
             var clock = Stopwatch.StartNew();
             long frame = 0, tick = Stopwatch.Frequency / Fps;
             try
             {
                 while (!stopping)
                 {
+                    var next = pending;
+                    if (next != null) { pending = null; r = (Rectangle)next; layout(); }
                     if (same) BitBlt(mem, ox, oy, sw, sh, screen, r.X, r.Y, 0x00CC0020);
                     else StretchBlt(mem, ox, oy, sw, sh, screen, r.X, r.Y, r.Width, r.Height, 0x00CC0020);
                     DrawCursor(mem, r, s, ox, oy, cursorW, cursorH);
@@ -260,16 +396,15 @@ namespace ControlCenterK
         #endregion
     }
 
-    /// <summary>Cadre rouge autour de la zone partagée, dessiné à l'extérieur (donc jamais capturé), transparent aux clics.</summary>
+    /// <summary>Cadre coloré autour d'une zone, dessiné à l'extérieur (donc jamais capturé), transparent aux clics.</summary>
     sealed class BorderFrame : IDisposable
     {
         readonly Form[] sides = new Form[4];
 
         [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
 
-        public BorderFrame(Rectangle r)
+        public BorderFrame(Rectangle r, Color color, int b)
         {
-            const int b = 2;
             var rects = new[]
             {
                 new Rectangle(r.X - b, r.Y - b, r.Width + 2 * b, b), new Rectangle(r.X - b, r.Bottom, r.Width + 2 * b, b),
@@ -280,7 +415,7 @@ namespace ControlCenterK
             {
                 for (int i = 0; i < 4; i++)
                 {
-                    var f = new Side { BackColor = Color.Red, FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false,
+                    var f = new Side { BackColor = color, FormBorderStyle = FormBorderStyle.None, ShowInTaskbar = false,
                         StartPosition = FormStartPosition.Manual, TopMost = true, Bounds = rects[i] };
                     f.Show();
                     f.Bounds = rects[i];
@@ -303,5 +438,32 @@ namespace ControlCenterK
 
         public void Close() { foreach (var f in sides) if (f != null) f.Close(); }
         public void Dispose() { foreach (var f in sides) if (f != null) f.Dispose(); }
+    }
+
+    /// <summary>Raccourcis globaux Ctrl+Alt+F1…F10 (fenêtre de messages invisible). Pas de chiffres : Ctrl+Alt = AltGr en AZERTY (@, #…).</summary>
+    sealed class HotKeys : NativeWindow, IDisposable
+    {
+        [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+        [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
+        readonly Action<int> pressed;
+
+        public HotKeys(Action<int> pressed)
+        {
+            this.pressed = pressed;
+            CreateHandle(new CreateParams { Parent = new IntPtr(-3) /* HWND_MESSAGE */ });
+            for (int i = 0; i <= 9; i++) RegisterHotKey(Handle, 0x4B00 + i, 0x1 | 0x2 | 0x4000 /* ALT | CTRL | NOREPEAT */, (uint)(0x70 + (i == 0 ? 9 : i - 1))); // F1…F9, F10 = 0
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == 0x312 /* WM_HOTKEY */) { int id = m.WParam.ToInt32() - 0x4B00; if (id >= 0 && id <= 9) pressed(id); }
+            base.WndProc(ref m);
+        }
+
+        public void Dispose()
+        {
+            for (int i = 0; i <= 9; i++) UnregisterHotKey(Handle, 0x4B00 + i);
+            DestroyHandle();
+        }
     }
 }
