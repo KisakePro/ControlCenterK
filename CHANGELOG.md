@@ -2,6 +2,14 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.7.1] - 2026-10-18 (BETA)
+
+- Partage d'écran : zones enregistrées (nom, coordonnées, couleur), redéfinissables à la souris.
+- Passage d'une zone à l'autre en direct, sans couper la caméra (Discord ne voit qu'un changement d'image).
+- Couleur par zone : cadre de la zone partagée à sa couleur, et option « Afficher toutes les zones ».
+- Raccourcis globaux désactivables : Ctrl+Alt+F1 à F9 (zone 1 à 9), Ctrl+Alt+F10 (arrêt).
+- L'ancienne zone unique est reprise comme « Zone 1 ».
+
 ## [0.7] - 2026-10-17 (BETA)
 
 - Nouveau module « Partage d'écran » (ancien utilitaire KStS) : une zone de l'écran envoyée en direct dans la caméra
