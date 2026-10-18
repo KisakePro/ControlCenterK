@@ -30,6 +30,7 @@ namespace ControlCenterK
         public List<ShareZone> Zones { get; set; }
         public bool Border { get; set; }    // cadre autour de la zone partagée
         public bool ShowAll { get; set; }   // cadres de toutes les zones enregistrées, chacune dans sa couleur
+        public bool HotKeys { get; set; }   // raccourcis Ctrl+Alt+F1…F10
         // ancienne zone unique (0.7) : reprise comme « Zone 1 »
         public int X { get; set; }
         public int Y { get; set; }
@@ -38,7 +39,7 @@ namespace ControlCenterK
 
         public static readonly string[] Palette = { "#FF3B30", "#34C759", "#0A84FF", "#FFCC00", "#AF52DE", "#FF9500", "#5AC8FA", "#FF2D92", "#FFFFFF" };
 
-        public ShareConfig() { Border = true; Zones = new List<ShareZone>(); }
+        public ShareConfig() { Border = true; HotKeys = true; Zones = new List<ShareZone>(); }
 
         public void Fix()
         {
@@ -196,8 +197,17 @@ namespace ControlCenterK
         public static void Enable(AppConfig c)
         {
             cfg = c;
-            if (hotkeys == null) hotkeys = new HotKeys(OnHotKey);
+            UpdateHotKeys();
             RefreshFrames();
+        }
+
+        /// <summary>Installe ou retire les raccourcis selon le réglage.</summary>
+        public static void UpdateHotKeys()
+        {
+            bool on;
+            lock (AppConfig.Sync) on = cfg != null && S.HotKeys;
+            if (on && hotkeys == null) hotkeys = new HotKeys(OnHotKey);
+            else if (!on && hotkeys != null) { hotkeys.Dispose(); hotkeys = null; }
         }
 
         public static void Disable()

@@ -104,7 +104,7 @@ namespace ControlCenterK
             {
                 "1.  Installez une fois la caméra virtuelle « " + ScreenShare.CamName + " » (carte ci-dessous, droits administrateur).",
                 "2.  Enregistrez vos zones (glissez à la souris ou saisissez les coordonnées), puis partagez-en une d'un clic.",
-                "     Pour jongler sans ouvrir ControlCenterK : Ctrl+Alt+F1 à F9 partage la zone 1 à 9, Ctrl+Alt+F10 arrête. La caméra ne se coupe pas.",
+                "     Pour jongler sans ouvrir ControlCenterK : Ctrl+Alt+F1 à F9 partage la zone 1 à 9, Ctrl+Alt+F10 arrête (désactivables). La caméra ne se coupe pas.",
                 "3.  Dans Discord : Paramètres → Voix et vidéo → Caméra → « " + ScreenShare.CamName + " », puis activez votre caméra en appel.",
                 "La zone est envoyée en direct (30 images/s, 1920 × 1080, curseur compris), avec des bandes noires si ses proportions diffèrent.",
                 "Utile pour ne montrer qu'une partie de l'écran, ou pour partager en plus d'un partage d'écran classique.",
@@ -170,6 +170,8 @@ namespace ControlCenterK
 
             y = Option(c, y, "Cadre autour de la zone partagée", "Dessiné à l'extérieur de la zone : il n'apparaît pas dans la vidéo.",
                 () => S.Border, v => S.Border = v);
+            y = Option(c, y, "Raccourcis clavier", "Ctrl+Alt+F1 à F9 : partager la zone 1 à 9 ; Ctrl+Alt+F10 : arrêter. Fonctionnent partout, même en jeu.",
+                () => S.HotKeys, v => { S.HotKeys = v; }, ScreenShare.UpdateHotKeys);
             y = Option(c, y, "Afficher toutes les zones", "Cadres fins de toutes les zones enregistrées, chacune dans sa couleur.",
                 () => S.ShowAll, v => S.ShowAll = v);
 
@@ -201,7 +203,7 @@ namespace ControlCenterK
             return c;
         }
 
-        int Option(Card c, int y, string label, string desc, Func<bool> get, Action<bool> set)
+        int Option(Card c, int y, string label, string desc, Func<bool> get, Action<bool> set, Action after = null)
         {
             var l = Theme.Label(label, Theme.Semi(10f), Theme.Text, Theme.Card);
             l.Location = new Point(Theme.S(20), y + Theme.S(2));
@@ -210,7 +212,14 @@ namespace ControlCenterK
             var tg = new Toggle { Anchor = AnchorStyles.Top | AnchorStyles.Right };
             lock (AppConfig.Sync) tg.Checked = get();
             tg.Location = new Point(c.Width - tg.Width - Theme.S(20), y + Theme.S(4));
-            tg.CheckedChanged += (s, e) => { lock (AppConfig.Sync) set(tg.Checked); cfg.Save(); ScreenShare.RefreshFrames(); };
+            tg.CheckedChanged += (s, e) =>
+            {
+                lock (AppConfig.Sync) set(tg.Checked);
+                cfg.Save();
+                ScreenShare.RefreshFrames();
+                if (after != null) after();
+                Rebuild(); // affiche ou masque les raccourcis sur chaque zone
+            };
             c.Controls.AddRange(new Control[] { l, d, tg });
             return d.Bottom + Theme.S(12);
         }
@@ -248,7 +257,9 @@ namespace ControlCenterK
                 lock (AppConfig.Sync) { var zz = S.Find(id); if (zz != null) zz.Name = n; }
                 cfg.Save();
             };
-            var keys = Theme.Label(index < 9 ? "Ctrl+Alt+F" + (index + 1) : "", Theme.Ui(8.5f), Theme.Muted, row.BackColor);
+            bool hk;
+            lock (AppConfig.Sync) hk = S.HotKeys;
+            var keys = Theme.Label(hk && index < 9 ? "Ctrl+Alt+F" + (index + 1) : "", Theme.Ui(8.5f), Theme.Muted, row.BackColor);
             keys.Location = new Point(nameBox.Parent.Right + Theme.S(12), Theme.S(14));
             var state = Theme.Label(live ? "● En direct" : "", Theme.Semi(9f), Theme.Green, row.BackColor);
             state.Location = new Point(keys.Right + Theme.S(12), Theme.S(13));
