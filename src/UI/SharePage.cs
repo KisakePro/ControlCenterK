@@ -11,9 +11,7 @@ namespace ControlCenterK
         readonly AppConfig cfg;
         readonly Panel scroll;
         readonly List<Card> cards = new List<Card>();
-        Label titleLabel, subLabel, status;
-        readonly Dictionary<string, TextBox> coords = new Dictionary<string, TextBox>();
-        FlatButton pickBtn, stopBtn;
+        Label titleLabel, subLabel;
         bool busy;
 
         ShareConfig S { get { return cfg.Share; } }
@@ -33,7 +31,7 @@ namespace ControlCenterK
 
         void OnChanged()
         {
-            try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(UpdateState)); } catch { }
+            try { if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(Rebuild)); } catch { }
         }
 
         #region Construction
@@ -47,7 +45,6 @@ namespace ControlCenterK
             foreach (Control c in scroll.Controls) old.Add(c);
             foreach (var c in old) { scroll.Controls.Remove(c); c.Dispose(); }
             cards.Clear();
-            coords.Clear();
 
             titleLabel = Theme.Label("Partage d'écran", Theme.Semi(18f), Theme.Text, Theme.Bg);
             titleLabel.Location = new Point(Theme.S(26), Theme.S(20));
@@ -58,12 +55,11 @@ namespace ControlCenterK
 
             cards.Add(HelpCard());
             cards.Add(CameraCard());
-            cards.Add(ZoneCard());
+            cards.Add(ZonesCard());
             foreach (var c in cards) scroll.Controls.Add(c);
             LayoutCards();
             scroll.ResumeLayout();
             scroll.AutoScrollPosition = new Point(0, keep);
-            UpdateState();
         }
 
         void LayoutCards()
@@ -107,7 +103,8 @@ namespace ControlCenterK
             string[] steps =
             {
                 "1.  Installez une fois la caméra virtuelle « " + ScreenShare.CamName + " » (carte ci-dessous, droits administrateur).",
-                "2.  Choisissez la zone de l'écran à partager : glissez à la souris, ou saisissez les coordonnées.",
+                "2.  Enregistrez vos zones (glissez à la souris ou saisissez les coordonnées), puis partagez-en une d'un clic.",
+                "     Pour jongler sans ouvrir ControlCenterK : Ctrl+Alt+F1 à F9 partage la zone 1 à 9, Ctrl+Alt+F10 arrête. La caméra ne se coupe pas.",
                 "3.  Dans Discord : Paramètres → Voix et vidéo → Caméra → « " + ScreenShare.CamName + " », puis activez votre caméra en appel.",
                 "La zone est envoyée en direct (30 images/s, 1920 × 1080, curseur compris), avec des bandes noires si ses proportions diffèrent.",
                 "Utile pour ne montrer qu'une partie de l'écran, ou pour partager en plus d'un partage d'écran classique.",
@@ -147,7 +144,7 @@ namespace ControlCenterK
                 new System.Threading.Thread(() =>
                 {
                     bool ok = ready ? ScreenShare.UninstallCamera() : ScreenShare.InstallCamera();
-                    try { BeginInvoke(new Action(() => { busy = false; Rebuild(); if (!ok) SetStatus(ready ? "Désinstallation annulée ou échouée." : "Installation annulée ou échouée.", true); })); } catch { }
+                    try { BeginInvoke(new Action(() => { busy = false; Rebuild(); if (!ok) MessageBox.Show(FindForm(), ready ? "Désinstallation annulée ou échouée." : "Installation annulée ou échouée.", "Caméra virtuelle", MessageBoxButtons.OK, MessageBoxIcon.Warning); })); } catch { }
                 }) { IsBackground = true }.Start();
             };
             c.Controls.AddRange(new Control[] { st, btn });
@@ -155,72 +152,194 @@ namespace ControlCenterK
             return c;
         }
 
-        Card ZoneCard()
+        Card ZonesCard()
         {
-            var c = NewCard("Zone partagée", "Coordonnées en pixels de l'écran (écran principal en haut à gauche = 0, 0).");
+            var c = NewCard("Zones", "Chaque zone a sa couleur : son cadre l'entoure quand elle est partagée, et « Afficher toutes les zones » " +
+                "montre toutes les zones enregistrées à la fois (pratique avec plusieurs écrans). Coordonnées en pixels, écran principal en haut à gauche = 0, 0.");
             int y = NextY(c);
-            pickBtn = new FlatButton("Choisir une zone", true) { Glyph = "" };
-            pickBtn.FitWidth();
-            pickBtn.Location = new Point(Theme.S(20), y);
-            pickBtn.Click += (s, e) => Pick();
-            stopBtn = new FlatButton("Arrêter le partage") { Glyph = "" };
-            stopBtn.FitWidth();
-            stopBtn.Location = new Point(pickBtn.Right + Theme.S(8), y);
-            stopBtn.Click += (s, e) => ScreenShare.Stop();
-            c.Controls.AddRange(new Control[] { pickBtn, stopBtn });
-            y = pickBtn.Bottom + Theme.S(14);
+            var add = new FlatButton("Nouvelle zone", true) { Glyph = Glyphs.Add };
+            add.FitWidth();
+            add.Location = new Point(Theme.S(20), y);
+            add.Click += (s, e) => Pick(null);
+            var stop = new FlatButton("Arrêter le partage") { Glyph = "\uE71A", Enabled = ScreenShare.Streaming };
+            stop.FitWidth();
+            stop.Location = new Point(add.Right + Theme.S(8), y);
+            stop.Click += (s, e) => ScreenShare.Stop();
+            c.Controls.AddRange(new Control[] { add, stop });
+            y = add.Bottom + Theme.S(12);
 
-            int x = Theme.S(20);
-            int[] vals;
-            lock (AppConfig.Sync) vals = new[] { S.X, S.Y, S.W, S.H };
-            string[] keys = { "X", "Y", "L", "H" };
-            for (int i = 0; i < 4; i++)
-            {
-                var l = Theme.Label(keys[i], Theme.Semi(10f), Theme.Text, Theme.Card);
-                l.Location = new Point(x, y + Theme.S(6));
-                var holder = new Panel { BackColor = Theme.Surface, Bounds = new Rectangle(x + Theme.S(18), y, Theme.S(80), Theme.S(30)) };
-                var tb = new TextBox { BorderStyle = BorderStyle.None, BackColor = Theme.Surface, ForeColor = Theme.Text, Font = Theme.Ui(9.5f),
-                    TextAlign = HorizontalAlignment.Right, Text = vals[i] == 0 && i >= 2 ? "" : vals[i].ToString() };
-                tb.Bounds = new Rectangle(Theme.S(8), (holder.Height - tb.PreferredHeight) / 2, holder.Width - Theme.S(16), tb.PreferredHeight);
-                tb.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; ApplyCoords(); } };
-                holder.Controls.Add(tb);
-                coords[keys[i]] = tb;
-                c.Controls.AddRange(new Control[] { l, holder });
-                x = holder.Right + Theme.S(18);
-            }
-            var apply = new FlatButton("Partager ces coordonnées") { Glyph = Glyphs.Check };
-            apply.FitWidth();
-            apply.Location = new Point(x, y);
-            apply.Click += (s, e) => ApplyCoords();
-            c.Controls.Add(apply);
-            y += Theme.S(44);
+            y = Option(c, y, "Cadre autour de la zone partagée", "Dessiné à l'extérieur de la zone : il n'apparaît pas dans la vidéo.",
+                () => S.Border, v => S.Border = v);
+            y = Option(c, y, "Afficher toutes les zones", "Cadres fins de toutes les zones enregistrées, chacune dans sa couleur.",
+                () => S.ShowAll, v => S.ShowAll = v);
 
-            var lb = Theme.Label("Afficher le cadre rouge autour de la zone", Theme.Semi(10f), Theme.Text, Theme.Card);
-            lb.Location = new Point(Theme.S(20), y + Theme.S(4));
-            var lbd = Theme.Label("Dessiné à l'extérieur de la zone : il n'apparaît pas dans la vidéo.", Theme.Ui(8.5f), Theme.Muted, Theme.Card);
-            lbd.Location = new Point(Theme.S(20), lb.Bottom + Theme.S(2));
-            var tg = new Toggle { Anchor = AnchorStyles.Top | AnchorStyles.Right };
-            lock (AppConfig.Sync) tg.Checked = S.Border;
-            tg.Location = new Point(c.Width - tg.Width - Theme.S(20), y + Theme.S(6));
-            tg.CheckedChanged += (s, e) => { lock (AppConfig.Sync) S.Border = tg.Checked; cfg.Save(); ScreenShare.ShowBorder(tg.Checked); };
-            c.Controls.AddRange(new Control[] { lb, lbd, tg });
-            y = lbd.Bottom + Theme.S(16);
-
-            status = Theme.Label("", Theme.Ui(9.5f), Theme.Muted, Theme.Card);
+            var status = Theme.Label("", Theme.Ui(9.5f), Theme.Muted, Theme.Card);
             status.MaximumSize = new Size(Theme.S(860), 0);
+            if (ScreenShare.Error != null) { status.Text = ScreenShare.Error; status.ForeColor = Theme.Red; }
+            else if (ScreenShare.Streaming)
+            {
+                var r = ScreenShare.Region;
+                status.Text = "● En direct : " + r.Width + " × " + r.Height + " à (" + r.X + ", " + r.Y + ") → caméra « " + ScreenShare.CamName + " ».";
+                status.ForeColor = Theme.Green;
+            }
+            else status.Text = "Arrêté. Partagez une zone pour commencer.";
             status.Location = new Point(Theme.S(20), y);
             c.Controls.Add(status);
-            SetNextY(c, y + Theme.S(44));
+            y = status.Bottom + Theme.S(12);
+
+            List<ShareZone> zones;
+            lock (AppConfig.Sync) zones = new List<ShareZone>(S.Zones);
+            if (zones.Count == 0)
+            {
+                var none = Theme.Label("Aucune zone : cliquez sur « Nouvelle zone » et glissez sur l'écran.", Theme.Ui(9f), Theme.Dim, Theme.Card);
+                none.Location = new Point(Theme.S(20), y);
+                c.Controls.Add(none);
+                y = none.Bottom + Theme.S(8);
+            }
+            for (int i = 0; i < zones.Count; i++) y = ZoneRow(c, y, zones[i], i);
+            SetNextY(c, y);
             return c;
+        }
+
+        int Option(Card c, int y, string label, string desc, Func<bool> get, Action<bool> set)
+        {
+            var l = Theme.Label(label, Theme.Semi(10f), Theme.Text, Theme.Card);
+            l.Location = new Point(Theme.S(20), y + Theme.S(2));
+            var d = Theme.Label(desc, Theme.Ui(8.5f), Theme.Muted, Theme.Card);
+            d.Location = new Point(Theme.S(20), l.Bottom + Theme.S(2));
+            var tg = new Toggle { Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            lock (AppConfig.Sync) tg.Checked = get();
+            tg.Location = new Point(c.Width - tg.Width - Theme.S(20), y + Theme.S(4));
+            tg.CheckedChanged += (s, e) => { lock (AppConfig.Sync) set(tg.Checked); cfg.Save(); ScreenShare.RefreshFrames(); };
+            c.Controls.AddRange(new Control[] { l, d, tg });
+            return d.Bottom + Theme.S(12);
+        }
+
+        int ZoneRow(Card c, int y, ShareZone z, int index)
+        {
+            bool live = ScreenShare.Streaming && ScreenShare.ActiveZone == z.Id;
+            var color = Theme.FromHex(z.Color, Color.Red);
+            var row = new Card { BackColor = live ? Theme.Mix(Theme.Surface, color, 0.16f) : Theme.Surface, Radius = 6,
+                Bounds = new Rectangle(Theme.S(14), y, c.Width - Theme.S(28), Theme.S(86)), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            string id = z.Id;
+
+            // ligne 1 : couleur, nom, raccourci, état, actions
+            var swatch = new Button { FlatStyle = FlatStyle.Flat, BackColor = color, Size = new Size(Theme.S(26), Theme.S(26)), Location = new Point(Theme.S(12), Theme.S(9)), Cursor = Cursors.Hand };
+            swatch.FlatAppearance.BorderColor = Theme.Border;
+            swatch.Click += (s, e) =>
+            {
+                using (var dlg = new ColorDialog { FullOpen = true, Color = swatch.BackColor })
+                {
+                    var custom = new List<int>();
+                    foreach (var h in ShareConfig.Palette) { var k = Theme.FromHex(h, Color.Red); custom.Add(k.R | k.G << 8 | k.B << 16); }
+                    dlg.CustomColors = custom.ToArray();
+                    if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+                    lock (AppConfig.Sync) { var zz = S.Find(id); if (zz != null) zz.Color = Theme.ToHex(dlg.Color); }
+                    cfg.Save();
+                    ScreenShare.RefreshFrames();
+                    Rebuild();
+                }
+            };
+            var nameBox = Box(row, z.Name, new Rectangle(swatch.Right + Theme.S(10), Theme.S(7), Theme.S(200), Theme.S(30)), HorizontalAlignment.Left);
+            nameBox.Leave += (s, e) =>
+            {
+                string n = nameBox.Text.Trim();
+                if (n.Length == 0) return;
+                lock (AppConfig.Sync) { var zz = S.Find(id); if (zz != null) zz.Name = n; }
+                cfg.Save();
+            };
+            var keys = Theme.Label(index < 9 ? "Ctrl+Alt+F" + (index + 1) : "", Theme.Ui(8.5f), Theme.Muted, row.BackColor);
+            keys.Location = new Point(nameBox.Parent.Right + Theme.S(12), Theme.S(14));
+            var state = Theme.Label(live ? "● En direct" : "", Theme.Semi(9f), Theme.Green, row.BackColor);
+            state.Location = new Point(keys.Right + Theme.S(12), Theme.S(13));
+            row.Controls.AddRange(new Control[] { swatch, keys, state });
+
+            int right = row.Width - Theme.S(8);
+            foreach (var spec in new[] { "del", "redo", "share" })
+            {
+                FlatButton b;
+                if (spec == "del")
+                {
+                    b = new FlatButton("Supprimer") { Glyph = Glyphs.Close };
+                    b.Click += (s, e) =>
+                    {
+                        if (MessageBox.Show(FindForm(), "Supprimer la zone « " + z.Name + " » ?", "Supprimer la zone", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                        if (ScreenShare.ActiveZone == id) ScreenShare.Stop();
+                        lock (AppConfig.Sync) S.Zones.RemoveAll(zz => zz.Id == id);
+                        cfg.Save();
+                        ScreenShare.RefreshFrames();
+                        Rebuild();
+                    };
+                }
+                else if (spec == "redo")
+                {
+                    b = new FlatButton("Redéfinir") { Glyph = "\uE7A8" };
+                    b.Click += (s, e) => Pick(id);
+                }
+                else
+                {
+                    b = new FlatButton(live ? "En direct" : "Partager", !live) { Glyph = "\uE7F4", Enabled = !live };
+                    b.Click += (s, e) => Share(id);
+                }
+                b.FitWidth();
+                b.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                b.Location = new Point(right - b.Width, Theme.S(6));
+                right = b.Left - Theme.S(8);
+                row.Controls.Add(b);
+            }
+
+            // ligne 2 : coordonnées modifiables
+            int x = Theme.S(48);
+            var boxes = new Dictionary<string, TextBox>();
+            int[] vals = { z.X, z.Y, z.W, z.H };
+            string[] names = { "X", "Y", "L", "H" };
+            for (int i = 0; i < 4; i++)
+            {
+                var l = Theme.Label(names[i], Theme.Semi(9.5f), Theme.Muted, row.BackColor);
+                l.Location = new Point(x, Theme.S(52));
+                row.Controls.Add(l);
+                boxes[names[i]] = Box(row, vals[i].ToString(), new Rectangle(x + Theme.S(16), Theme.S(46), Theme.S(72), Theme.S(30)), HorizontalAlignment.Right);
+                x += Theme.S(104);
+            }
+            var apply = new FlatButton("Appliquer") { Glyph = Glyphs.Check };
+            apply.FitWidth();
+            apply.Location = new Point(x + Theme.S(4), Theme.S(46));
+            Action save = () =>
+            {
+                int nx, ny, nw, nh;
+                if (!int.TryParse(boxes["X"].Text, out nx) || !int.TryParse(boxes["Y"].Text, out ny) ||
+                    !int.TryParse(boxes["L"].Text, out nw) || !int.TryParse(boxes["H"].Text, out nh) || nw < 16 || nh < 16)
+                {
+                    MessageBox.Show(FindForm(), "Coordonnées invalides : nombres entiers, zone de 16 × 16 au minimum.", "Zone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                Update(id, new Rectangle(nx, ny, nw / 2 * 2, nh / 2 * 2));
+            };
+            apply.Click += (s, e) => save();
+            foreach (var tb in boxes.Values) tb.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; save(); } };
+            row.Controls.Add(apply);
+
+            c.Controls.Add(row);
+            return y + Theme.S(94);
+        }
+
+        static TextBox Box(Control parent, string text, Rectangle bounds, HorizontalAlignment align)
+        {
+            var holder = new Panel { BackColor = Theme.SurfaceHi, Bounds = bounds };
+            var tb = new TextBox { BorderStyle = BorderStyle.None, BackColor = Theme.SurfaceHi, ForeColor = Theme.Text, Font = Theme.Ui(9.5f), Text = text, TextAlign = align };
+            tb.Bounds = new Rectangle(Theme.S(8), (holder.Height - tb.PreferredHeight) / 2, holder.Width - Theme.S(16), tb.PreferredHeight);
+            holder.Controls.Add(tb);
+            parent.Controls.Add(holder);
+            return tb;
         }
 
         #endregion
 
         #region Actions
 
-        void Pick()
+        /// <summary>Sélection à la souris : nouvelle zone (id null) ou nouvelle position d'une zone existante.</summary>
+        void Pick(string id)
         {
-            if (!ScreenShare.CameraReady()) { SetStatus("Installez d'abord la caméra virtuelle.", true); return; }
             var f = FindForm();
             if (f != null) f.WindowState = FormWindowState.Minimized;
             var t = new Timer { Interval = 200 };
@@ -231,59 +350,36 @@ namespace ControlCenterK
                 ZoneSelector.Pick(r =>
                 {
                     if (f != null) { f.WindowState = FormWindowState.Normal; f.Activate(); }
-                    if (r == null) { SetStatus("Sélection annulée.", false); return; }
-                    Share(r.Value);
+                    if (r == null) return;
+                    if (id != null) { Update(id, r.Value); return; }
+                    var z = new ShareZone { Id = Guid.NewGuid().ToString("N").Substring(0, 8), X = r.Value.X, Y = r.Value.Y, W = r.Value.Width, H = r.Value.Height };
+                    lock (AppConfig.Sync)
+                    {
+                        z.Name = "Zone " + (S.Zones.Count + 1);
+                        z.Color = S.NextColor();
+                        S.Zones.Add(z);
+                    }
+                    cfg.Save();
+                    ScreenShare.RefreshFrames();
+                    Rebuild();
                 });
             };
             t.Start();
         }
 
-        void ApplyCoords()
+        void Update(string id, Rectangle r)
         {
-            int x, y, w, h;
-            if (!int.TryParse(coords["X"].Text, out x) || !int.TryParse(coords["Y"].Text, out y) ||
-                !int.TryParse(coords["L"].Text, out w) || !int.TryParse(coords["H"].Text, out h))
-            { SetStatus("Coordonnées invalides : nombres entiers attendus.", true); return; }
-            w = w / 2 * 2;
-            h = h / 2 * 2;
-            if (w < 16 || h < 16) { SetStatus("Zone trop petite (16 × 16 minimum).", true); return; }
-            if (!ScreenShare.CameraReady()) { SetStatus("Installez d'abord la caméra virtuelle.", true); return; }
-            Share(new Rectangle(x, y, w, h));
-        }
-
-        void Share(Rectangle r)
-        {
-            lock (AppConfig.Sync) { S.X = r.X; S.Y = r.Y; S.W = r.Width; S.H = r.Height; }
+            lock (AppConfig.Sync) { var z = S.Find(id); if (z == null) return; z.X = r.X; z.Y = r.Y; z.W = r.Width; z.H = r.Height; }
             cfg.Save();
-            coords["X"].Text = r.X.ToString(); coords["Y"].Text = r.Y.ToString();
-            coords["L"].Text = r.Width.ToString(); coords["H"].Text = r.Height.ToString();
-            bool border;
-            lock (AppConfig.Sync) border = S.Border;
-            ScreenShare.Start(r, border);
+            if (ScreenShare.Streaming && ScreenShare.ActiveZone == id) ScreenShare.ShareSaved(id); // zone en direct : suit la nouvelle position
+            else ScreenShare.RefreshFrames();
+            Rebuild();
         }
 
-        void SetStatus(string text, bool error)
+        void Share(string id)
         {
-            if (status == null || status.IsDisposed) return;
-            status.Text = text;
-            status.ForeColor = error ? Theme.Red : Theme.Muted;
-        }
-
-        void UpdateState()
-        {
-            if (status == null || status.IsDisposed) return;
-            if (ScreenShare.Error != null) SetStatus(ScreenShare.Error, true);
-            else if (ScreenShare.Streaming)
-            {
-                var r = ScreenShare.Region;
-                status.Text = "● En direct : zone " + r.Width + " × " + r.Height + " à (" + r.X + ", " + r.Y + ") → caméra « " + ScreenShare.CamName + " ».";
-                status.ForeColor = Theme.Green;
-            }
-            else if (status.ForeColor != Theme.Red) SetStatus("Arrêté. Choisissez une zone pour commencer le partage.", false);
-            pickBtn.Text = ScreenShare.Streaming ? "Changer de zone" : "Choisir une zone";
-            pickBtn.FitWidth();
-            stopBtn.Left = pickBtn.Right + Theme.S(8);
-            stopBtn.Enabled = ScreenShare.Streaming;
+            if (!ScreenShare.CameraReady()) { MessageBox.Show(FindForm(), "Installez d'abord la caméra virtuelle.", "Partage d'écran", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            ScreenShare.ShareSaved(id);
         }
 
         #endregion
