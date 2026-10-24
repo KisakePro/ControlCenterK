@@ -58,7 +58,7 @@ namespace ControlCenterK
             navAudio = new NavButton(Glyphs.Speaker, "Périphériques audio");
             navMouse = new NavButton(Glyphs.Mouse, "Souris");
             navKeyboard = new NavButton(Glyphs.Keyboard, "Clavier");
-            navFps = new NavButton(Glyphs.Fps, "FPS");
+            navFps = new NavButton(Glyphs.Fps, "Capteurs");
             navShare = new NavButton(Glyphs.Share, "Partage d'écran");
             navSettings = new NavButton(Glyphs.Settings, "Paramètres");
             foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navShare, navSettings }) side.Controls.Add(n);

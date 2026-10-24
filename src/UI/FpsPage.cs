@@ -47,9 +47,9 @@ namespace ControlCenterK
             foreach (Control c in new List<Control>(Controls2(scroll))) { scroll.Controls.Remove(c); c.Dispose(); }
             cards.Clear();
 
-            titleLabel = Theme.Label("FPS", Theme.Semi(18f), Theme.Text, Theme.Bg);
+            titleLabel = Theme.Label("Capteurs", Theme.Semi(18f), Theme.Text, Theme.Bg);
             titleLabel.Location = new Point(Theme.S(26), Theme.S(20));
-            subLabel = Theme.Label("Affiche les images par seconde et leur courbe par-dessus les programmes choisis.", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
+            subLabel = Theme.Label("FPS, processeur, carte graphique et mémoire affichés en direct (valeurs et courbes) par-dessus les programmes choisis.", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
             subLabel.Location = new Point(Theme.S(28), Theme.S(58));
             scroll.Controls.Add(titleLabel);
             scroll.Controls.Add(subLabel);

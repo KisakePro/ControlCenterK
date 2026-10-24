@@ -341,7 +341,7 @@ namespace ControlCenterK
                 cfg.ModMouse, v => cfg.ModMouse = v);
             AddModule(Theme.S(70) + 3 * Theme.S(66), Glyphs.Keyboard, "Clavier", "Touches, macros et éclairage des claviers (en construction).",
                 cfg.ModKeyboard, v => cfg.ModKeyboard = v);
-            AddModule(Theme.S(70) + 4 * Theme.S(66), Glyphs.Fps, "FPS", "Images par seconde et leur courbe affichées par-dessus les jeux choisis (droits administrateur).",
+            AddModule(Theme.S(70) + 4 * Theme.S(66), Glyphs.Fps, "Capteurs", "FPS, processeur, carte graphique et mémoire (valeurs et courbes) affichés par-dessus les jeux choisis.",
                 cfg.ModFps, v => cfg.ModFps = v);
             AddModule(Theme.S(70) + 5 * Theme.S(66), Glyphs.Share, "Partage d'écran", "Partage une zone de l'écran sur Discord comme une webcam, via une caméra virtuelle (anciennement KStS).",
                 cfg.ModShare, v => cfg.ModShare = v);
