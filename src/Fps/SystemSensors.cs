@@ -15,6 +15,10 @@ namespace ControlCenterK
     static class SystemSensors
     {
         public static float CpuUsage { get; private set; }
+        /// <summary>Mémoire vive : pourcentage utilisé, Go utilisés et Go au total.</summary>
+        public static float RamUsage { get; private set; }
+        public static float RamUsedGb { get; private set; }
+        public static float RamTotalGb { get; private set; }
         public static float GpuUsage { get; private set; }
         /// <summary>Températures en °C, NaN si inconnues.</summary>
         public static float CpuTemp { get; private set; }
@@ -32,6 +36,7 @@ namespace ControlCenterK
         public static void Update()
         {
             UpdateCpu();
+            UpdateRam();
             UpdateTemps();
             // température du processeur : sonde de ControlCenterK d'abord, sinon HWiNFO
             CpuProbe.EnsureRunning();
@@ -115,6 +120,24 @@ namespace ControlCenterK
             }
             catch (DllNotFoundException) { nvFailed = true; return false; }
             catch (EntryPointNotFoundException) { nvFailed = true; return false; }
+        }
+
+        #endregion
+
+        #region Mémoire vive
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct MEMORYSTATUSEX { public int Length, Load; public ulong Total, Avail, TotalPage, AvailPage, TotalVirtual, AvailVirtual, AvailExtended; }
+        [DllImport("kernel32.dll")] static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX m);
+
+        static void UpdateRam()
+        {
+            var m = new MEMORYSTATUSEX { Length = Marshal.SizeOf(typeof(MEMORYSTATUSEX)) };
+            if (!GlobalMemoryStatusEx(ref m) || m.Total == 0) return;
+            const float Gb = 1024f * 1024 * 1024;
+            RamTotalGb = m.Total / Gb;
+            RamUsedGb = (m.Total - m.Avail) / Gb;
+            RamUsage = 100f * (m.Total - m.Avail) / m.Total;
         }
 
         #endregion

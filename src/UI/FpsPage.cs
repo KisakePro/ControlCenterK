@@ -405,11 +405,12 @@ namespace ControlCenterK
             Row(c, "Afficher les FPS", null, Switch(() => L.ShowFps, v => L.ShowFps = v));
             Row(c, "Afficher le processeur (CPU)", "Utilisation, température et courbe de l'utilisation.", Switch(() => L.ShowCpu, v => L.ShowCpu = v));
             Row(c, "Afficher la carte graphique (GPU)", "Utilisation, température et courbe de l'utilisation.", Switch(() => L.ShowGpu, v => L.ShowGpu = v));
+            Row(c, "Afficher la mémoire vive (RAM)", "Pourcentage utilisé, Go utilisés sur le total, et courbe.", Switch(() => L.ShowRam, v => L.ShowRam = v));
 
             var graph = new Toggle();
             lock (AppConfig.Sync) graph.Checked = L.Graph;
             graph.CheckedChanged += (s, e) => { lock (AppConfig.Sync) L.Graph = graph.Checked; Save(); };
-            Row(c, "Courbes", "Sous chaque valeur : chutes d'images en creux, utilisation du CPU et du GPU de 0 à 100 %.", graph);
+            Row(c, "Courbes", "Sous chaque valeur : chutes d'images en creux, utilisation du CPU, du GPU et de la RAM de 0 à 100 %.", graph);
 
             Row(c, "Durée de la courbe", null, Drop(Theme.S(200), new[] { 5, 10, 20, 30, 60 }, v => v + " secondes", () => L.GraphSeconds, v => L.GraphSeconds = v));
             Row(c, "Opacité du fond", null, Drop(Theme.S(200), new[] { 0, 25, 40, 55, 70, 85, 100 }, v => v == 0 ? "Sans fond" : v + " %", () => L.Background, v => L.Background = v));

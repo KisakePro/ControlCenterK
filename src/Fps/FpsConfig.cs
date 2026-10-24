@@ -16,6 +16,7 @@ namespace ControlCenterK
         public bool ShowFps { get; set; }       // blocs affichés : FPS, processeur, carte graphique
         public bool ShowCpu { get; set; }
         public bool ShowGpu { get; set; }
+        public bool ShowRam { get; set; }
 
         public FpsLook()
         {
@@ -27,13 +28,13 @@ namespace ControlCenterK
             Graph = true;
             GraphSeconds = 10;
             Background = 55;
-            ShowFps = ShowCpu = ShowGpu = true;
+            ShowFps = ShowCpu = ShowGpu = ShowRam = true;
         }
 
         public FpsLook Clone()
         {
             return new FpsLook { Color = Color, Size = Size, Corner = Corner, OffsetX = OffsetX, OffsetY = OffsetY,
-                Graph = Graph, GraphSeconds = GraphSeconds, Background = Background, ShowFps = ShowFps, ShowCpu = ShowCpu, ShowGpu = ShowGpu };
+                Graph = Graph, GraphSeconds = GraphSeconds, Background = Background, ShowFps = ShowFps, ShowCpu = ShowCpu, ShowGpu = ShowGpu, ShowRam = ShowRam };
         }
 
         public void FixLook()
@@ -45,7 +46,7 @@ namespace ControlCenterK
             if (OffsetY < 0 || OffsetY > 2000) OffsetY = 12;
             if (GraphSeconds < 2 || GraphSeconds > 120) GraphSeconds = 10;
             if (Background < 0 || Background > 100) Background = 55;
-            if (!ShowFps && !ShowCpu && !ShowGpu) ShowFps = true;
+            if (!ShowFps && !ShowCpu && !ShowGpu && !ShowRam) ShowFps = true;
         }
     }
 

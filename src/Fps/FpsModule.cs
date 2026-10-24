@@ -22,7 +22,7 @@ namespace ControlCenterK
         static Timer timer;
         static FpsOverlay overlay;
         static readonly List<int> samples = new List<int>();
-        static readonly List<float> cpuSamples = new List<float>(), gpuSamples = new List<float>();
+        static readonly List<float> cpuSamples = new List<float>(), gpuSamples = new List<float>(), ramSamples = new List<float>();
         static int sensorTick;   // images par tranche de 250 ms, pour le processus suivi
         static readonly Dictionary<int, string> names = new Dictionary<int, string>();
         static int trackedPid, secondFps;
@@ -189,7 +189,7 @@ namespace ControlCenterK
                 // FPS affichés : images horodatées dans la dernière seconde (valeur exacte, sans effet de paquet)
                 secondFps = FpsCapture.Count(match, end - FpsCapture.Freq, end);
             }
-            if (pid != trackedPid) { samples.Clear(); cpuSamples.Clear(); gpuSamples.Clear(); trackedPid = pid; }
+            if (pid != trackedPid) { samples.Clear(); cpuSamples.Clear(); gpuSamples.Clear(); ramSamples.Clear(); trackedPid = pid; }
             samples.Add(frames);
             // apparence : propre au programme si elle existe, sinon réglages par défaut
             FpsLook look;
@@ -198,10 +198,13 @@ namespace ControlCenterK
             if (samples.Count > keep) samples.RemoveRange(0, samples.Count - keep);
 
             // processeur et carte graphique : relevés deux fois par seconde, seulement s'ils sont affichés
-            if ((look.ShowCpu || look.ShowGpu) && sensorTick++ % 2 == 0) SystemSensors.Update();
+            if ((look.ShowCpu || look.ShowGpu || look.ShowRam) && sensorTick++ % 2 == 0) SystemSensors.Update();
             float cpu = SystemSensors.CpuUsage, gpu = SystemSensors.GpuUsage;
             if (preview) { cpu = 35 + 20 * (float)Math.Sin(previewTick / 5.0); gpu = 85 - (previewTick % 14 == 0 ? 40 : 0); }
+            float ram = preview ? 48 : SystemSensors.RamUsage;
             cpuSamples.Add(cpu);
+            ramSamples.Add(ram);
+            if (ramSamples.Count > keep) ramSamples.RemoveRange(0, ramSamples.Count - keep);
             gpuSamples.Add(gpu);
             if (cpuSamples.Count > keep) cpuSamples.RemoveRange(0, cpuSamples.Count - keep);
             if (gpuSamples.Count > keep) gpuSamples.RemoveRange(0, gpuSamples.Count - keep);
@@ -225,6 +228,7 @@ namespace ControlCenterK
                 Fps = fps, FpsSamples = samples, Capacity = keep,
                 Cpu = cpu, CpuTemp = preview ? 62 : SystemSensors.CpuTemp, CpuSamples = cpuSamples,
                 Gpu = gpu, GpuTemp = preview ? 71 : SystemSensors.GpuTemp, GpuSamples = gpuSamples,
+                Ram = ram, RamUsedGb = preview ? 15.4f : SystemSensors.RamUsedGb, RamTotalGb = preview ? 32 : SystemSensors.RamTotalGb, RamSamples = ramSamples,
             };
             overlay.Render(info, look, area, behind ? wnd : IntPtr.Zero);
         }
@@ -237,6 +241,7 @@ namespace ControlCenterK
             samples.Clear();
             cpuSamples.Clear();
             gpuSamples.Clear();
+            ramSamples.Clear();
         }
 
     }
@@ -247,7 +252,8 @@ namespace ControlCenterK
         public int Fps, Capacity;
         public List<int> FpsSamples;
         public float Cpu, CpuTemp, Gpu, GpuTemp;
-        public List<float> CpuSamples, GpuSamples;
+        public float Ram, RamUsedGb, RamTotalGb;
+        public List<float> CpuSamples, GpuSamples, RamSamples;
     }
 
     /// <summary>Fenêtre transparente, toujours au premier plan et non cliquable (les clics vont au jeu).</summary>
@@ -332,13 +338,17 @@ namespace ControlCenterK
                 int pad = (int)Math.Max(4, px * 0.3f), gap = (int)(px * 0.15f);
                 int textW = (int)Math.Ceiling(digits.Width + gap + unit.Width);
                 int inner = Math.Max(textW, (int)(px * 5.5f));
+                // lignes CPU / GPU / RAM : libellé + valeurs les plus longues possibles, sans chevauchement
+                float label = pg.MeasureString("RAM", mid, PointF.Empty, fmt).Width + px * 0.5f;
+                if (f.ShowCpu || f.ShowGpu) inner = Math.Max(inner, (int)Math.Ceiling(label + pg.MeasureString("100 %   100 °C", mid, PointF.Empty, fmt).Width));
+                if (f.ShowRam) inner = Math.Max(inner, (int)Math.Ceiling(label + pg.MeasureString("100 %   " + d.RamUsedGb.ToString("0.0") + " / " + Math.Round(d.RamTotalGb) + " Go", mid, PointF.Empty, fmt).Width));
                 int fpsH = (int)Math.Ceiling(px * 1.05f), lineH = (int)Math.Ceiling(px * 0.75f);
                 int graphH = (int)(px * 1.3f), smallGraphH = (int)(px * 0.9f);
 
                 // hauteur totale : blocs affichés, séparés par un petit espace
                 int h = pad, blocks = 0;
                 if (f.ShowFps) { h += fpsH + (f.Graph ? pad + graphH : 0); blocks++; }
-                foreach (bool on in new[] { f.ShowCpu, f.ShowGpu })
+                foreach (bool on in new[] { f.ShowCpu, f.ShowGpu, f.ShowRam })
                     if (on) { h += (blocks > 0 ? pad : 0) + lineH + (f.Graph ? pad / 2 + smallGraphH : 0); blocks++; }
                 h += pad;
                 int w = inner + 2 * pad;
@@ -372,20 +382,21 @@ namespace ControlCenterK
                         y0 += fpsH;
                         if (f.Graph) { DrawGraph(g, d.FpsSamples, d.Capacity, 0, new Rectangle(pad, y0 + pad, inner, graphH), color); y0 += pad + graphH; }
                     }
-                    for (int k = 0; k < 2; k++)
+                    for (int k = 0; k < 3; k++)
                     {
-                        if (!(k == 0 ? f.ShowCpu : f.ShowGpu)) continue;
+                        if (!(k == 0 ? f.ShowCpu : k == 1 ? f.ShowGpu : f.ShowRam)) continue;
                         if (y0 > pad) y0 += pad;
-                        float use = k == 0 ? d.Cpu : d.Gpu, temp = k == 0 ? d.CpuTemp : d.GpuTemp;
-                        // « CPU   45 %   62 °C » : libellé à gauche, valeurs à droite
-                        text(k == 0 ? "CPU" : "GPU", mid, dim, pad, y0);
-                        string vals = Math.Round(use) + " %   " + (float.IsNaN(temp) ? "— °C" : Math.Round(temp) + " °C");
+                        float use = k == 0 ? d.Cpu : k == 1 ? d.Gpu : d.Ram, temp = k == 0 ? d.CpuTemp : d.GpuTemp;
+                        // « CPU   45 %   62 °C » / « RAM   48 %   15,4 / 32 Go » : libellé à gauche, valeurs à droite
+                        text(k == 0 ? "CPU" : k == 1 ? "GPU" : "RAM", mid, dim, pad, y0);
+                        string vals = Math.Round(use) + " %   " + (k == 2 ? d.RamUsedGb.ToString("0.0") + " / " + Math.Round(d.RamTotalGb) + " Go"
+                                    : float.IsNaN(temp) ? "— °C" : Math.Round(temp) + " °C");
                         float vw = g.MeasureString(vals, mid, PointF.Empty, fmt).Width;
                         text(vals, mid, br, pad + inner - vw, y0);
                         y0 += lineH;
                         if (f.Graph)
                         {
-                            DrawGraph(g, k == 0 ? d.CpuSamples : d.GpuSamples, d.Capacity, 100, new Rectangle(pad, y0 + pad / 2, inner, smallGraphH), color);
+                            DrawGraph(g, k == 0 ? d.CpuSamples : k == 1 ? d.GpuSamples : d.RamSamples, d.Capacity, 100, new Rectangle(pad, y0 + pad / 2, inner, smallGraphH), color);
                             y0 += pad / 2 + smallGraphH;
                         }
                     }
