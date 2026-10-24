@@ -149,6 +149,17 @@ namespace ControlCenterK
             retry.Click += (s, e) => FpsModule.Restart();
             c.Controls.Add(admin);
             c.Controls.Add(retry);
+            SystemSensors.Update();
+            string gpuSrc = SystemSensors.GpuSource == "AMD" ? "pilote AMD" : SystemSensors.GpuSource == "NVIDIA" ? "pilote NVIDIA"
+                          : SystemSensors.GpuSource == "HWiNFO" ? "HWiNFO" : "Windows (charge seulement)";
+            var temps = Theme.Label("Carte graphique : " + gpuSrc + ". Processeur : charge mesurée par Windows ; température " +
+                    (SystemSensors.HwInfo ? "lue dans HWiNFO." : "indisponible (« — ») : Windows ne la fournit pas sans pilote. " +
+                     "Lancez HWiNFO avec « Shared Memory Support » pour l'afficher."),
+                Theme.Ui(8.5f), Theme.Muted, Theme.Card);
+            temps.MaximumSize = new Size(Theme.S(620), 0);
+            temps.Location = new Point(Theme.S(20), Theme.S(64));
+            temps.Name = "temps";
+            c.Controls.Add(temps);
             SetNextY(c, status.Bottom + Theme.S(28));
             return c;
         }
@@ -162,7 +173,10 @@ namespace ControlCenterK
             else { status.Text = "Prêt : l'affichage apparaît dès qu'un des programmes ci-dessous est au premier plan."; status.ForeColor = Theme.Muted; }
             statusCard.Controls["admin"].Visible = err && FpsCapture.NeedsAdmin;
             statusCard.Controls["retry"].Visible = err && !FpsCapture.NeedsAdmin;
-            SetNextY(statusCard, Math.Max(status.Bottom + Theme.S(28), Theme.S(96)));
+            var temps = statusCard.Controls["temps"];
+            int bottom = status.Bottom;
+            if (temps != null) { temps.Top = status.Bottom + Theme.S(8); bottom = temps.Bottom; }
+            SetNextY(statusCard, Math.Max(bottom + Theme.S(16), Theme.S(96)));
             LayoutCards();
         }
 
@@ -343,14 +357,26 @@ namespace ControlCenterK
             Row(c, "Décalage horizontal", "Distance au bord gauche ou droit de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => L.OffsetX, v => L.OffsetX = v));
             Row(c, "Décalage vertical", "Distance au bord haut ou bas de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => L.OffsetY, v => L.OffsetY = v));
 
+            Row(c, "Afficher les FPS", null, Switch(() => L.ShowFps, v => L.ShowFps = v));
+            Row(c, "Afficher le processeur (CPU)", "Utilisation, température et courbe de l'utilisation.", Switch(() => L.ShowCpu, v => L.ShowCpu = v));
+            Row(c, "Afficher la carte graphique (GPU)", "Utilisation, température et courbe de l'utilisation.", Switch(() => L.ShowGpu, v => L.ShowGpu = v));
+
             var graph = new Toggle();
             lock (AppConfig.Sync) graph.Checked = L.Graph;
             graph.CheckedChanged += (s, e) => { lock (AppConfig.Sync) L.Graph = graph.Checked; Save(); };
-            Row(c, "Courbe des FPS", "Sous le nombre : les chutes d'images y apparaissent en creux.", graph);
+            Row(c, "Courbes", "Sous chaque valeur : chutes d'images en creux, utilisation du CPU et du GPU de 0 à 100 %.", graph);
 
             Row(c, "Durée de la courbe", null, Drop(Theme.S(200), new[] { 5, 10, 20, 30, 60 }, v => v + " secondes", () => L.GraphSeconds, v => L.GraphSeconds = v));
             Row(c, "Opacité du fond", null, Drop(Theme.S(200), new[] { 0, 25, 40, 55, 70, 85, 100 }, v => v == 0 ? "Sans fond" : v + " %", () => L.Background, v => L.Background = v));
             return c;
+        }
+
+        Toggle Switch(Func<bool> get, Action<bool> set)
+        {
+            var t = new Toggle();
+            lock (AppConfig.Sync) t.Checked = get();
+            t.CheckedChanged += (s, e) => { lock (AppConfig.Sync) set(t.Checked); Save(); };
+            return t;
         }
 
         DropButton Drop(int width, int[] values, Func<int, string> text, Func<int> get, Action<int> set)

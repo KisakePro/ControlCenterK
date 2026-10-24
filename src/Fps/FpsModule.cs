@@ -21,7 +21,9 @@ namespace ControlCenterK
         static AppConfig cfg;
         static Timer timer;
         static FpsOverlay overlay;
-        static readonly List<int> samples = new List<int>();   // images par tranche de 250 ms, pour le processus suivi
+        static readonly List<int> samples = new List<int>();
+        static readonly List<float> cpuSamples = new List<float>(), gpuSamples = new List<float>();
+        static int sensorTick;   // images par tranche de 250 ms, pour le processus suivi
         static readonly Dictionary<int, string> names = new Dictionary<int, string>();
         static int trackedPid, secondFps;
         static long lastEnd;
@@ -187,13 +189,22 @@ namespace ControlCenterK
                 // FPS affichés : images horodatées dans la dernière seconde (valeur exacte, sans effet de paquet)
                 secondFps = FpsCapture.Count(match, end - FpsCapture.Freq, end);
             }
-            if (pid != trackedPid) { samples.Clear(); trackedPid = pid; }
+            if (pid != trackedPid) { samples.Clear(); cpuSamples.Clear(); gpuSamples.Clear(); trackedPid = pid; }
             samples.Add(frames);
             // apparence : propre au programme si elle existe, sinon réglages par défaut
             FpsLook look;
             lock (AppConfig.Sync) look = F.LookFor(preview ? previewApp : NameOf(pid)).Clone();
             int keep = look.GraphSeconds * PerSecond;
             if (samples.Count > keep) samples.RemoveRange(0, samples.Count - keep);
+
+            // processeur et carte graphique : relevés deux fois par seconde, seulement s'ils sont affichés
+            if ((look.ShowCpu || look.ShowGpu) && sensorTick++ % 2 == 0) SystemSensors.Update();
+            float cpu = SystemSensors.CpuUsage, gpu = SystemSensors.GpuUsage;
+            if (preview) { cpu = 35 + 20 * (float)Math.Sin(previewTick / 5.0); gpu = 85 - (previewTick % 14 == 0 ? 40 : 0); }
+            cpuSamples.Add(cpu);
+            gpuSamples.Add(gpu);
+            if (cpuSamples.Count > keep) cpuSamples.RemoveRange(0, cpuSamples.Count - keep);
+            if (gpuSamples.Count > keep) gpuSamples.RemoveRange(0, gpuSamples.Count - keep);
 
             int fps;
             if (preview)
@@ -209,7 +220,13 @@ namespace ControlCenterK
             var area = ClientOnScreen(wnd);
             if (area.Width <= 0 || area.Height <= 0) { Hide(); return; }
             if (overlay == null) overlay = new FpsOverlay();
-            overlay.Render(fps, samples, keep, look, area, behind ? wnd : IntPtr.Zero);
+            var info = new OverlayInfo
+            {
+                Fps = fps, FpsSamples = samples, Capacity = keep,
+                Cpu = cpu, CpuTemp = preview ? 62 : SystemSensors.CpuTemp, CpuSamples = cpuSamples,
+                Gpu = gpu, GpuTemp = preview ? 71 : SystemSensors.GpuTemp, GpuSamples = gpuSamples,
+            };
+            overlay.Render(info, look, area, behind ? wnd : IntPtr.Zero);
         }
 
         static void Hide()
@@ -218,8 +235,19 @@ namespace ControlCenterK
             if (Current != null) { Current = null; CurrentFps = 0; Raise(); }
             trackedPid = 0;
             samples.Clear();
+            cpuSamples.Clear();
+            gpuSamples.Clear();
         }
 
+    }
+
+    /// <summary>Valeurs affichées par l'overlay.</summary>
+    sealed class OverlayInfo
+    {
+        public int Fps, Capacity;
+        public List<int> FpsSamples;
+        public float Cpu, CpuTemp, Gpu, GpuTemp;
+        public List<float> CpuSamples, GpuSamples;
     }
 
     /// <summary>Fenêtre transparente, toujours au premier plan et non cliquable (les clics vont au jeu).</summary>
@@ -262,9 +290,9 @@ namespace ControlCenterK
         /// Dessine l'affichage. "behind" : fenêtre du jeu quand il est en arrière-plan ; l'affichage est alors posé
         /// juste au-dessus de lui (sous ControlCenterK) au lieu d'être au premier plan.
         /// </summary>
-        public void Render(int fps, List<int> samples, int capacity, FpsLook f, Rectangle area, IntPtr behind)
+        public void Render(OverlayInfo d, FpsLook f, Rectangle area, IntPtr behind)
         {
-            using (var bmp = Draw(fps, samples, capacity, f))
+            using (var bmp = Draw(d, f))
             {
                 int x = f.Corner == "tr" || f.Corner == "br" ? area.Right - bmp.Width - f.OffsetX : area.Left + f.OffsetX;
                 int y = f.Corner == "bl" || f.Corner == "br" ? area.Bottom - bmp.Height - f.OffsetY : area.Top + f.OffsetY;
@@ -284,30 +312,42 @@ namespace ControlCenterK
             }
         }
 
-        /// <summary>Image de l'affichage : nombre de FPS, et courbe en dessous. Largeur fixe (3 chiffres) pour ne pas bouger.</summary>
-        public static Bitmap Draw(int fps, List<int> samples, int capacity, FpsLook f)
+        /// <summary>
+        /// Image de l'affichage : bloc FPS (nombre + courbe), puis blocs processeur et carte graphique
+        /// (utilisation, température, courbe de l'utilisation de 0 à 100 %). Largeur fixe pour ne pas bouger.
+        /// </summary>
+        public static Bitmap Draw(OverlayInfo d, FpsLook f)
         {
             float px = f.Size * 96f / 72f * Theme.S(100) / 100f;          // taille du nombre en pixels (suit l'échelle d'affichage)
             var color = Theme.FromHex(f.Color, Color.Lime);
             using (var big = new Font("Segoe UI Semibold", px, FontStyle.Regular, GraphicsUnit.Pixel))
             using (var small = new Font("Segoe UI Semibold", Math.Max(7f, px * 0.42f), FontStyle.Regular, GraphicsUnit.Pixel))
+            using (var mid = new Font("Segoe UI Semibold", Math.Max(8f, px * 0.6f), FontStyle.Regular, GraphicsUnit.Pixel))
             using (var probe = new Bitmap(1, 1))
             using (var pg = Graphics.FromImage(probe))
             {
                 var fmt = StringFormat.GenericTypographic;
-                string num = fps.ToString();
-                SizeF digits = pg.MeasureString(Math.Max(999, fps).ToString(), big, PointF.Empty, fmt);
+                SizeF digits = pg.MeasureString(Math.Max(999, d.Fps).ToString(), big, PointF.Empty, fmt);
                 SizeF unit = pg.MeasureString("FPS", small, PointF.Empty, fmt);
                 int pad = (int)Math.Max(4, px * 0.3f), gap = (int)(px * 0.15f);
                 int textW = (int)Math.Ceiling(digits.Width + gap + unit.Width);
-                int textH = (int)Math.Ceiling(px * 1.05f);
-                int graphW = f.Graph ? Math.Max(textW, (int)(px * 5.5f)) : 0;
-                int graphH = f.Graph ? (int)(px * 1.3f) : 0;
-                int w = Math.Max(textW, graphW) + 2 * pad;
-                int h = textH + (f.Graph ? graphH + pad : 0) + 2 * pad;
+                int inner = Math.Max(textW, (int)(px * 5.5f));
+                int fpsH = (int)Math.Ceiling(px * 1.05f), lineH = (int)Math.Ceiling(px * 0.75f);
+                int graphH = (int)(px * 1.3f), smallGraphH = (int)(px * 0.9f);
+
+                // hauteur totale : blocs affichés, séparés par un petit espace
+                int h = pad, blocks = 0;
+                if (f.ShowFps) { h += fpsH + (f.Graph ? pad + graphH : 0); blocks++; }
+                foreach (bool on in new[] { f.ShowCpu, f.ShowGpu })
+                    if (on) { h += (blocks > 0 ? pad : 0) + lineH + (f.Graph ? pad / 2 + smallGraphH : 0); blocks++; }
+                h += pad;
+                int w = inner + 2 * pad;
 
                 var bmp = new Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                 using (var g = Graphics.FromImage(bmp))
+                using (var br = new SolidBrush(color))
+                using (var dim = new SolidBrush(Color.FromArgb(170, color)))
+                using (var shadow = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
                 {
                     g.SmoothingMode = SmoothingMode.AntiAlias;
                     g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
@@ -315,36 +355,62 @@ namespace ControlCenterK
                         using (var bg = new SolidBrush(Color.FromArgb(f.Background * 255 / 100, 10, 12, 16)))
                         using (var path = Round(new Rectangle(0, 0, w - 1, h - 1), Math.Max(3, pad / 2)))
                             g.FillPath(bg, path);
-                    using (var br = new SolidBrush(color))
-                    using (var shadow = new SolidBrush(Color.FromArgb(170, 0, 0, 0)))
+                    Action<string, Font, Brush, float, float> text = (t, font, b, x, y) =>
                     {
-                        // nombre aligné à droite sur 3 chiffres, « FPS » à côté ; ombre légère pour rester lisible sans fond
+                        g.DrawString(t, font, shadow, x + 1, y + 1, fmt); // ombre légère pour rester lisible sans fond
+                        g.DrawString(t, font, b, x, y, fmt);
+                    };
+
+                    int y0 = pad;
+                    if (f.ShowFps)
+                    {
+                        // nombre aligné à droite sur 3 chiffres, « FPS » à côté
+                        string num = d.Fps.ToString();
                         float nw = g.MeasureString(num, big, PointF.Empty, fmt).Width;
-                        float nx = pad + digits.Width - nw, ny = pad - px * 0.12f;
-                        g.DrawString(num, big, shadow, nx + 1, ny + 1, fmt);
-                        g.DrawString(num, big, br, nx, ny, fmt);
-                        float ux = pad + digits.Width + gap, uy = pad + textH - unit.Height - px * 0.05f;
-                        g.DrawString("FPS", small, shadow, ux + 1, uy + 1, fmt);
-                        g.DrawString("FPS", small, br, ux, uy, fmt);
+                        text(num, big, br, pad + digits.Width - nw, y0 - px * 0.12f);
+                        text("FPS", small, br, pad + digits.Width + gap, y0 + fpsH - unit.Height - px * 0.05f);
+                        y0 += fpsH;
+                        if (f.Graph) { DrawGraph(g, d.FpsSamples, d.Capacity, 0, new Rectangle(pad, y0 + pad, inner, graphH), color); y0 += pad + graphH; }
                     }
-                    if (f.Graph) DrawGraph(g, samples, capacity, new Rectangle(pad, pad + textH + pad, w - 2 * pad, graphH), color);
+                    for (int k = 0; k < 2; k++)
+                    {
+                        if (!(k == 0 ? f.ShowCpu : f.ShowGpu)) continue;
+                        if (y0 > pad) y0 += pad;
+                        float use = k == 0 ? d.Cpu : d.Gpu, temp = k == 0 ? d.CpuTemp : d.GpuTemp;
+                        // « CPU   45 %   62 °C » : libellé à gauche, valeurs à droite
+                        text(k == 0 ? "CPU" : "GPU", mid, dim, pad, y0);
+                        string vals = Math.Round(use) + " %   " + (float.IsNaN(temp) ? "— °C" : Math.Round(temp) + " °C");
+                        float vw = g.MeasureString(vals, mid, PointF.Empty, fmt).Width;
+                        text(vals, mid, br, pad + inner - vw, y0);
+                        y0 += lineH;
+                        if (f.Graph)
+                        {
+                            DrawGraph(g, k == 0 ? d.CpuSamples : d.GpuSamples, d.Capacity, 100, new Rectangle(pad, y0 + pad / 2, inner, smallGraphH), color);
+                            y0 += pad / 2 + smallGraphH;
+                        }
+                    }
                 }
                 return bmp;
             }
         }
 
-        static void DrawGraph(Graphics g, List<int> samples, int capacity, Rectangle r, Color color)
+        /// <summary>Courbe des dernières valeurs ; échelle fixe (fixedMax > 0) ou du maximum récent + 15 %.</summary>
+        static void DrawGraph<T>(Graphics g, List<T> samples, int capacity, float fixedMax, Rectangle r, Color color) where T : IConvertible
         {
             using (var line = new Pen(Color.FromArgb(70, color), 1))
                 g.DrawLine(line, r.Left, r.Bottom, r.Right, r.Bottom);
             if (samples.Count < 2) return;
-            // échelle : de 0 au maximum récent (+15 %), pour que les chutes se voient en creux
-            int max = 1;
-            foreach (int s in samples) max = Math.Max(max, s);
-            float scale = (r.Height - 2) / (max * 1.15f), step = r.Width / (float)Math.Max(1, capacity - 1);
+            float max = fixedMax;
+            if (max <= 0)
+            {
+                max = 1;
+                foreach (var s in samples) max = Math.Max(max, s.ToSingle(null));
+                max *= 1.15f; // les chutes se voient en creux
+            }
+            float scale = (r.Height - 2) / max, step = r.Width / (float)Math.Max(1, capacity - 1);
             var pts = new PointF[samples.Count];
             float x0 = r.Right - step * (samples.Count - 1);
-            for (int i = 0; i < samples.Count; i++) pts[i] = new PointF(x0 + i * step, r.Bottom - 1 - samples[i] * scale);
+            for (int i = 0; i < samples.Count; i++) pts[i] = new PointF(x0 + i * step, r.Bottom - 1 - Math.Min(max, samples[i].ToSingle(null)) * scale);
             var fill = new List<PointF>(pts) { new PointF(pts[pts.Length - 1].X, r.Bottom), new PointF(pts[0].X, r.Bottom) };
             using (var b = new SolidBrush(Color.FromArgb(50, color))) g.FillPolygon(b, fill.ToArray());
             using (var p = new Pen(color, Math.Max(1.5f, r.Height / 22f)) { LineJoin = LineJoin.Round }) g.DrawLines(p, pts);
