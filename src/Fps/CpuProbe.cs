@@ -14,7 +14,7 @@ namespace ControlCenterK
     /// On utilise PawnIO (pilote signé, open source) et son module « AMDFamily17 » (LGPL-2.1, embarqué).
     /// PawnIO exige les droits administrateur : la sonde est ControlCenterK lancé avec « --sonde » par une tâche
     /// planifiée (droits élevés, créée une seule fois). Elle publie la température en mémoire partagée et s'arrête
-    /// d'elle-même quand ControlCenterK n'est plus lancé.
+    /// d'elle-même dès que ControlCenterK est fermé (l'exe reste ainsi remplaçable par les mises à jour).
     /// </summary>
     static class CpuProbe
     {
@@ -146,7 +146,7 @@ namespace ControlCenterK
                 using (var pci = new Mutex(false, @"Global\Access_PCI")) // partagé avec les autres outils (HWiNFO, LibreHardwareMonitor…)
                 {
                     int idle = 0;
-                    while (idle < 60) // 30 s sans ControlCenterK : la sonde s'arrête
+                    while (idle < 3) // ControlCenterK fermé : arrêt en 1 s (libère l'exe pour les mises à jour)
                     {
                         float t = Tctl(h, pci);
                         if (!float.IsNaN(t))
