@@ -55,6 +55,7 @@ namespace ControlCenterK
             scroll.Controls.Add(subLabel);
 
             cards.Add(StatusCard());
+            cards.Add(ProbeCard());
             cards.Add(AppsCard());
             cards.Add(LookCard());
             foreach (var c in cards) scroll.Controls.Add(c);
@@ -153,8 +154,8 @@ namespace ControlCenterK
             string gpuSrc = SystemSensors.GpuSource == "AMD" ? "pilote AMD" : SystemSensors.GpuSource == "NVIDIA" ? "pilote NVIDIA"
                           : SystemSensors.GpuSource == "HWiNFO" ? "HWiNFO" : "Windows (charge seulement)";
             var temps = Theme.Label("Carte graphique : " + gpuSrc + ". Processeur : charge mesurée par Windows ; température " +
-                    (SystemSensors.HwInfo ? "lue dans HWiNFO." : "indisponible (« — ») : Windows ne la fournit pas sans pilote. " +
-                     "Lancez HWiNFO avec « Shared Memory Support » pour l'afficher."),
+                    (SystemSensors.ProbeActive ? "lue par la sonde de ControlCenterK." : SystemSensors.HwInfo ? "lue dans HWiNFO." :
+                     "indisponible (« — ») : installez la sonde ci-dessous."),
                 Theme.Ui(8.5f), Theme.Muted, Theme.Card);
             temps.MaximumSize = new Size(Theme.S(620), 0);
             temps.Location = new Point(Theme.S(20), Theme.S(64));
@@ -178,6 +179,50 @@ namespace ControlCenterK
             if (temps != null) { temps.Top = status.Bottom + Theme.S(8); bottom = temps.Bottom; }
             SetNextY(statusCard, Math.Max(bottom + Theme.S(16), Theme.S(96)));
             LayoutCards();
+        }
+
+        Card ProbeCard()
+        {
+            var c = NewCard("Sonde de température du processeur",
+                "Windows ne donne pas la température du processeur : elle se lit par un pilote. La sonde utilise PawnIO " +
+                "(pilote signé et open source, celui de LibreHardwareMonitor) et tourne en arrière-plan avec les droits administrateur, " +
+                "lancée par une tâche planifiée : une seule confirmation à l'installation, plus rien ensuite. Processeurs AMD Ryzen.");
+            bool pawn = CpuProbe.PawnIOInstalled, inst = pawn && CpuProbe.Installed();
+            string text = !pawn ? "PawnIO n'est pas installé : installez-le depuis pawnio.eu, puis revenez ici."
+                        : inst ? (SystemSensors.ProbeActive ? "✓ Sonde active" : "Sonde installée (démarrage…)") : "Sonde non installée";
+            var st = Theme.Label(text, Theme.Semi(10f), inst && SystemSensors.ProbeActive ? Theme.Green : pawn ? Theme.Muted : Theme.Red, Theme.Card);
+            st.Location = new Point(Theme.S(20), NextY(c) + Theme.S(6));
+            c.Controls.Add(st);
+            FlatButton btn;
+            if (!pawn)
+            {
+                btn = new FlatButton("Ouvrir pawnio.eu", true) { Glyph = "\uE774" };
+                btn.Click += (s, e) => { try { Process.Start("https://pawnio.eu"); } catch { } };
+            }
+            else
+            {
+                btn = new FlatButton(inst ? "Désinstaller la sonde" : "Installer la sonde", !inst) { Glyph = "\uE7EF" };
+                btn.Click += (s, e) =>
+                {
+                    btn.Enabled = false;
+                    btn.Text = (inst ? "Désinstallation" : "Installation") + "… (acceptez la demande administrateur)";
+                    btn.FitWidth();
+                    btn.Left = c.Width - btn.Width - Theme.S(20);
+                    new System.Threading.Thread(() =>
+                    {
+                        bool ok = inst ? CpuProbe.Uninstall() : CpuProbe.Install();
+                        if (ok && !inst) System.Threading.Thread.Sleep(2500); // le temps de la première mesure
+                        SystemSensors.Update();
+                        try { BeginInvoke(new Action(Rebuild)); } catch { }
+                    }) { IsBackground = true }.Start();
+                };
+            }
+            btn.FitWidth();
+            btn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btn.Location = new Point(c.Width - btn.Width - Theme.S(20), NextY(c));
+            c.Controls.Add(btn);
+            SetNextY(c, btn.Bottom + Theme.S(8));
+            return c;
         }
 
         Card AppsCard()

@@ -20,6 +20,7 @@ rem 2. Application
   /win32manifest:src\app.manifest /win32icon:src\app.ico ^
   /resource:src\Share\driver\obs-virtualcam-module64.dll,obs-virtualcam-module64.dll ^
   /resource:src\Share\driver\obs-virtualcam-module32.dll,obs-virtualcam-module32.dll ^
+  /resource:src\Fps\pawnio\AMDFamily17.bin,AMDFamily17.bin ^
   /out:bin\ControlCenterK.exe %REFS% /recurse:src\*.cs || goto :fail
 echo OK : bin\ControlCenterK.exe
 

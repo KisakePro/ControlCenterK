@@ -21,6 +21,8 @@ namespace ControlCenterK
         public static float GpuTemp { get; private set; }
         /// <summary>Vrai si HWiNFO partage ses capteurs (source de la température du processeur).</summary>
         public static bool HwInfo { get; private set; }
+        /// <summary>Vrai si la sonde de ControlCenterK fournit la température du processeur.</summary>
+        public static bool ProbeActive { get; private set; }
         /// <summary>Source des valeurs de la carte graphique : "AMD", "NVIDIA", "HWiNFO" ou "Windows".</summary>
         public static string GpuSource { get; private set; }
 
@@ -31,6 +33,11 @@ namespace ControlCenterK
         {
             UpdateCpu();
             UpdateTemps();
+            // température du processeur : sonde de ControlCenterK d'abord, sinon HWiNFO
+            CpuProbe.EnsureRunning();
+            float probe = CpuProbe.Read();
+            ProbeActive = !float.IsNaN(probe);
+            if (ProbeActive) CpuTemp = probe;
             // carte graphique : pilote du fabricant d'abord (sans rien installer), puis HWiNFO, puis Windows (charge seule)
             float load, temp;
             if (Amd(out load, out temp)) GpuSource = "AMD";
