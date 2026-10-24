@@ -21,6 +21,12 @@ namespace ControlCenterK
         [STAThread]
         static void Main(string[] args)
         {
+            if (Array.IndexOf(args, "--sonde") >= 0)
+            {
+                // sonde de température lancée en administrateur par la tâche planifiée : aucune interface
+                CpuProbe.RunProbe();
+                return;
+            }
             if (Array.IndexOf(args, "--quit") >= 0)
             {
                 // Demande à l'instance en cours de se fermer proprement (utilisé par l'installateur)

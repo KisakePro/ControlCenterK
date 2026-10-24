@@ -47,14 +47,15 @@ namespace ControlCenterK
             foreach (Control c in new List<Control>(Controls2(scroll))) { scroll.Controls.Remove(c); c.Dispose(); }
             cards.Clear();
 
-            titleLabel = Theme.Label("FPS", Theme.Semi(18f), Theme.Text, Theme.Bg);
+            titleLabel = Theme.Label("Capteurs", Theme.Semi(18f), Theme.Text, Theme.Bg);
             titleLabel.Location = new Point(Theme.S(26), Theme.S(20));
-            subLabel = Theme.Label("Affiche les images par seconde et leur courbe par-dessus les programmes choisis.", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
+            subLabel = Theme.Label("FPS, processeur, carte graphique et mémoire affichés en direct (valeurs et courbes) par-dessus les programmes choisis.", Theme.Ui(9.5f), Theme.Muted, Theme.Bg);
             subLabel.Location = new Point(Theme.S(28), Theme.S(58));
             scroll.Controls.Add(titleLabel);
             scroll.Controls.Add(subLabel);
 
             cards.Add(StatusCard());
+            cards.Add(ProbeCard());
             cards.Add(AppsCard());
             cards.Add(LookCard());
             foreach (var c in cards) scroll.Controls.Add(c);
@@ -149,6 +150,17 @@ namespace ControlCenterK
             retry.Click += (s, e) => FpsModule.Restart();
             c.Controls.Add(admin);
             c.Controls.Add(retry);
+            SystemSensors.Update();
+            string gpuSrc = SystemSensors.GpuSource == "AMD" ? "pilote AMD" : SystemSensors.GpuSource == "NVIDIA" ? "pilote NVIDIA"
+                          : SystemSensors.GpuSource == "HWiNFO" ? "HWiNFO" : "Windows (charge seulement)";
+            var temps = Theme.Label("Carte graphique : " + gpuSrc + ". Processeur : charge mesurée par Windows ; température " +
+                    (SystemSensors.ProbeActive ? "lue par la sonde de ControlCenterK." : SystemSensors.HwInfo ? "lue dans HWiNFO." :
+                     "indisponible (« — ») : installez la sonde ci-dessous."),
+                Theme.Ui(8.5f), Theme.Muted, Theme.Card);
+            temps.MaximumSize = new Size(Theme.S(620), 0);
+            temps.Location = new Point(Theme.S(20), Theme.S(64));
+            temps.Name = "temps";
+            c.Controls.Add(temps);
             SetNextY(c, status.Bottom + Theme.S(28));
             return c;
         }
@@ -162,8 +174,55 @@ namespace ControlCenterK
             else { status.Text = "Prêt : l'affichage apparaît dès qu'un des programmes ci-dessous est au premier plan."; status.ForeColor = Theme.Muted; }
             statusCard.Controls["admin"].Visible = err && FpsCapture.NeedsAdmin;
             statusCard.Controls["retry"].Visible = err && !FpsCapture.NeedsAdmin;
-            SetNextY(statusCard, Math.Max(status.Bottom + Theme.S(28), Theme.S(96)));
+            var temps = statusCard.Controls["temps"];
+            int bottom = status.Bottom;
+            if (temps != null) { temps.Top = status.Bottom + Theme.S(8); bottom = temps.Bottom; }
+            SetNextY(statusCard, Math.Max(bottom + Theme.S(16), Theme.S(96)));
             LayoutCards();
+        }
+
+        Card ProbeCard()
+        {
+            var c = NewCard("Sonde de température du processeur",
+                "Windows ne donne pas la température du processeur : elle se lit par un pilote. La sonde utilise PawnIO " +
+                "(pilote signé et open source, celui de LibreHardwareMonitor) et tourne en arrière-plan avec les droits administrateur, " +
+                "lancée par une tâche planifiée : une seule confirmation à l'installation, plus rien ensuite. Processeurs AMD Ryzen.");
+            bool pawn = CpuProbe.PawnIOInstalled, inst = pawn && CpuProbe.Installed();
+            string text = !pawn ? "PawnIO n'est pas installé : installez-le depuis pawnio.eu, puis revenez ici."
+                        : inst ? (SystemSensors.ProbeActive ? "✓ Sonde active" : "Sonde installée (démarrage…)") : "Sonde non installée";
+            var st = Theme.Label(text, Theme.Semi(10f), inst && SystemSensors.ProbeActive ? Theme.Green : pawn ? Theme.Muted : Theme.Red, Theme.Card);
+            st.Location = new Point(Theme.S(20), NextY(c) + Theme.S(6));
+            c.Controls.Add(st);
+            FlatButton btn;
+            if (!pawn)
+            {
+                btn = new FlatButton("Ouvrir pawnio.eu", true) { Glyph = "\uE774" };
+                btn.Click += (s, e) => { try { Process.Start("https://pawnio.eu"); } catch { } };
+            }
+            else
+            {
+                btn = new FlatButton(inst ? "Désinstaller la sonde" : "Installer la sonde", !inst) { Glyph = "\uE7EF" };
+                btn.Click += (s, e) =>
+                {
+                    btn.Enabled = false;
+                    btn.Text = (inst ? "Désinstallation" : "Installation") + "… (acceptez la demande administrateur)";
+                    btn.FitWidth();
+                    btn.Left = c.Width - btn.Width - Theme.S(20);
+                    new System.Threading.Thread(() =>
+                    {
+                        bool ok = inst ? CpuProbe.Uninstall() : CpuProbe.Install();
+                        if (ok && !inst) System.Threading.Thread.Sleep(2500); // le temps de la première mesure
+                        SystemSensors.Update();
+                        try { BeginInvoke(new Action(Rebuild)); } catch { }
+                    }) { IsBackground = true }.Start();
+                };
+            }
+            btn.FitWidth();
+            btn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btn.Location = new Point(c.Width - btn.Width - Theme.S(20), NextY(c));
+            c.Controls.Add(btn);
+            SetNextY(c, btn.Bottom + Theme.S(8));
+            return c;
         }
 
         Card AppsCard()
@@ -343,14 +402,27 @@ namespace ControlCenterK
             Row(c, "Décalage horizontal", "Distance au bord gauche ou droit de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => L.OffsetX, v => L.OffsetX = v));
             Row(c, "Décalage vertical", "Distance au bord haut ou bas de la fenêtre.", Drop(Theme.S(200), offsets, v => v + " px", () => L.OffsetY, v => L.OffsetY = v));
 
+            Row(c, "Afficher les FPS", null, Switch(() => L.ShowFps, v => L.ShowFps = v));
+            Row(c, "Afficher le processeur (CPU)", "Utilisation, température et courbe de l'utilisation.", Switch(() => L.ShowCpu, v => L.ShowCpu = v));
+            Row(c, "Afficher la carte graphique (GPU)", "Utilisation, température et courbe de l'utilisation.", Switch(() => L.ShowGpu, v => L.ShowGpu = v));
+            Row(c, "Afficher la mémoire vive (RAM)", "Pourcentage utilisé, Go utilisés sur le total, et courbe.", Switch(() => L.ShowRam, v => L.ShowRam = v));
+
             var graph = new Toggle();
             lock (AppConfig.Sync) graph.Checked = L.Graph;
             graph.CheckedChanged += (s, e) => { lock (AppConfig.Sync) L.Graph = graph.Checked; Save(); };
-            Row(c, "Courbe des FPS", "Sous le nombre : les chutes d'images y apparaissent en creux.", graph);
+            Row(c, "Courbes", "Sous chaque valeur : chutes d'images en creux, utilisation du CPU, du GPU et de la RAM de 0 à 100 %.", graph);
 
             Row(c, "Durée de la courbe", null, Drop(Theme.S(200), new[] { 5, 10, 20, 30, 60 }, v => v + " secondes", () => L.GraphSeconds, v => L.GraphSeconds = v));
             Row(c, "Opacité du fond", null, Drop(Theme.S(200), new[] { 0, 25, 40, 55, 70, 85, 100 }, v => v == 0 ? "Sans fond" : v + " %", () => L.Background, v => L.Background = v));
             return c;
+        }
+
+        Toggle Switch(Func<bool> get, Action<bool> set)
+        {
+            var t = new Toggle();
+            lock (AppConfig.Sync) t.Checked = get();
+            t.CheckedChanged += (s, e) => { lock (AppConfig.Sync) set(t.Checked); Save(); };
+            return t;
         }
 
         DropButton Drop(int width, int[] values, Func<int, string> text, Func<int> get, Action<int> set)

@@ -2,6 +2,15 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.7.2] - 2026-10-24 (BETA)
+
+- Le module « FPS » devient « Capteurs » : en plus des FPS, l'affichage en jeu montre le processeur, la carte graphique
+  et la mémoire vive (utilisation, température, courbe de 0 à 100 %) ; chaque bloc s'affiche ou non.
+- Carte graphique : charge et température lues par le pilote AMD ou NVIDIA, sans rien installer.
+- Processeur : charge mesurée par Windows ; température par la nouvelle sonde (PawnIO, pilote signé, module AMD Ryzen
+  embarqué), installée en un clic et lancée par une tâche planifiée, ou à défaut par HWiNFO.
+- Mémoire vive : pourcentage utilisé et Go utilisés sur le total.
+
 ## [0.7.1] - 2026-10-18 (BETA)
 
 - Partage d'écran : zones enregistrées (nom, coordonnées, couleur), redéfinissables à la souris.
