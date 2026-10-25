@@ -2,6 +2,15 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.7.3] - 2026-10-25 (BETA)
+
+- Nouveau module « Capture d'écran » (façon ShareX) : Impr. écran fige l'écran ; glisser = zone, clic = fenêtre,
+  Entrée = écran entier. Ctrl+Impr = écran sous la souris, Alt+Impr = fenêtre active.
+- Menu après la sélection : copier, enregistrer, copier et enregistrer, enregistrer sous, ouvrir l'éditeur.
+- Éditeur : rectangle, flèche, crayon, surligneur, texte, floutage, couleur, épaisseur, annuler / rétablir.
+- Réglages : action par défaut, curseur, PNG ou JPEG, dossier, nom des fichiers ; liste des dernières captures.
+- La section « Jeux et streaming » de la barre latérale devient « Outils ».
+
 ## [0.7.2] - 2026-10-24 (BETA)
 
 - Le module « FPS » devient « Capteurs » : en plus des FPS, l'affichage en jeu montre le processeur, la carte graphique
