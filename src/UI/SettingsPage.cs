@@ -345,7 +345,9 @@ namespace ControlCenterK
                 cfg.ModFps, v => cfg.ModFps = v);
             AddModule(Theme.S(70) + 5 * Theme.S(66), Glyphs.Share, "Partage d'écran", "Partage une zone de l'écran sur Discord comme une webcam, via une caméra virtuelle (anciennement KStS).",
                 cfg.ModShare, v => cfg.ModShare = v);
-            modCard.Height = Theme.S(70) + 6 * Theme.S(66) + Theme.S(8);
+            AddModule(Theme.S(70) + 6 * Theme.S(66), Glyphs.Capture, "Capture d'écran", "Impr. écran façon ShareX : zone, fenêtre ou écran, puis copier, enregistrer ou annoter dans l'éditeur.",
+                cfg.ModCapture, v => cfg.ModCapture = v);
+            modCard.Height = Theme.S(70) + 7 * Theme.S(66) + Theme.S(8);
         }
 
         void AddModule(int y, string glyph, string label, string desc, bool value, Action<bool> apply)

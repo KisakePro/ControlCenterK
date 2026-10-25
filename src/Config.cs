@@ -184,6 +184,8 @@ namespace ControlCenterK
         public bool ModFps { get; set; }                         // module "FPS"
         public bool ModShare { get; set; }                       // module "Partage d'écran" (KStS)
         public ShareConfig Share { get; set; }
+        public bool ModCapture { get; set; }                     // module "Capture d'écran"
+        public CaptureConfig Capture { get; set; }
         public FpsConfig Fps { get; set; }
         public MouseConfig Mouse { get; set; }
         public KeyboardConfig Keyboard { get; set; }
@@ -204,6 +206,7 @@ namespace ControlCenterK
             Keyboard = new KeyboardConfig();
             Fps = new FpsConfig();
             Share = new ShareConfig();
+            Capture = new CaptureConfig();
             ModMidi = true;
             ModKeyboard = true;
             AutoUpdate = true;
@@ -269,6 +272,8 @@ namespace ControlCenterK
             Fps.Fix();
             if (Share == null) Share = new ShareConfig();
             Share.Fix();
+            if (Capture == null) Capture = new CaptureConfig();
+            Capture.Fix();
             if (Router == null) Router = new RouterConfig();
             Router.Fix();
             if (Theme == null) Theme = new ThemeDef { Name = "Bleu nuit", Accent = "#4C8DFF", Base = "#AAB4E1", Intensity = 1 };
@@ -617,6 +622,6 @@ namespace ControlCenterK
         public const string Volume = "\uE767", Mic = "\uE720", Speaker = "\uE7F5", Headphone = "\uE7F6",
             App = "\uE7C4", Apps = "\uE71D", Focus = "\uE7F4", System = "\uE770", Settings = "\uE713",
             Mixer = "\uE9E9", Close = "\uE711", Add = "\uE710", Chevron = "\uE70D", Refresh = "\uE72C",
-            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Fps = "\uEC4A", Share = "\uE7F4", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
+            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Fps = "\uEC4A", Share = "\uE7F4", Capture = "\uE722", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
     }
 }
