@@ -96,6 +96,9 @@ namespace ControlCenterK
             // Partage d'écran : rien ne tourne tant qu'aucune zone n'est partagée
             if (Cfg.ModShare) ScreenShare.Enable(Cfg);
             else ScreenShare.Disable();
+            // Capture d'écran : touche Impr. écran interceptée seulement si le module est actif
+            if (Cfg.ModCapture) ScreenCapture.Enable(Cfg);
+            else ScreenCapture.Disable();
 
             var h = ModulesChanged;
             if (h != null) h();
@@ -122,6 +125,7 @@ namespace ControlCenterK
             if (KeyboardModule.Running) KeyboardModule.Stop(); // rend l'éclairage au clavier
             if (FpsModule.Running) FpsModule.Stop(); // ferme la session de mesure
             ScreenShare.Disable(); // libère la caméra virtuelle et les raccourcis
+            ScreenCapture.Disable(); // rend la touche Impr. écran
             if (Router != null) { Engine.Router = null; Router.Dispose(); Router = null; }
             VirtualHost.Stop();
         }
