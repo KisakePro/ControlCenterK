@@ -2,6 +2,10 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.7.3.2] - 2026-11-01 (BETA)
+
+- Éditeur de capture : boutons en icônes (nom affiché au survol), barre plus compacte.
+
 ## [0.7.3.1] - 2026-11-01 (BETA)
 
 - Éditeur de capture : les boutons ne se superposent plus (ils passent à la ligne si la fenêtre est étroite).
