@@ -2,6 +2,16 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.7.3.1] - 2026-11-01 (BETA)
+
+- Éditeur de capture : les boutons ne se superposent plus (ils passent à la ligne si la fenêtre est étroite).
+- Nouvel outil Sélection : déplacer, redimensionner (poignées), supprimer (Suppr), dupliquer (Ctrl+D), décaler aux flèches,
+  changer couleur / épaisseur d'un élément déjà placé ; double-clic sur un texte pour le modifier.
+- Coller une image du presse-papiers par-dessus la capture (Ctrl+V ou bouton), ou glisser un fichier image ;
+  elle se déplace et se redimensionne (proportions gardées, Maj = libres).
+- Nouveaux outils : ellipse, ligne, numéros (pastilles 1, 2, 3…).
+- Annuler / rétablir couvre aussi les déplacements, redimensionnements et suppressions.
+
 ## [0.7.3] - 2026-10-25 (BETA)
 
 - Nouveau module « Capture d'écran » (façon ShareX) : Impr. écran fige l'écran ; glisser = zone, clic = fenêtre,
