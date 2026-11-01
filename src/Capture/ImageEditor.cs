@@ -233,14 +233,16 @@ namespace ControlCenterK
             Func<Control, Control> add = c => { c.Margin = new Padding(Theme.S(3)); bar.Controls.Add(c); return c; };
             Action gap = () => add(new Panel { Width = Theme.S(10), Height = Theme.S(32), BackColor = Theme.Side });
 
-            foreach (var t in new[] { new[] { "select", "Sélection" }, new[] { "rect", "Rectangle" }, new[] { "ellipse", "Ellipse" }, new[] { "line", "Ligne" },
-                                      new[] { "arrow", "Flèche" }, new[] { "pen", "Crayon" }, new[] { "marker", "Surligneur" }, new[] { "text", "Texte" },
-                                      new[] { "counter", "Numéro" }, new[] { "blur", "Flouter" } })
+            var tips = new ToolTip();
+            foreach (var t in new[] { new[] { "select", "Sélection", "" }, new[] { "rect", "Rectangle", "" }, new[] { "ellipse", "Ellipse", "" },
+                                      new[] { "line", "Ligne", "" }, new[] { "arrow", "Flèche", "" }, new[] { "pen", "Crayon", "" },
+                                      new[] { "marker", "Surligneur", "" }, new[] { "text", "Texte", "" }, new[] { "counter", "Numéro", "" },
+                                      new[] { "blur", "Flouter", "" } })
             {
                 string id = t[0];
-                var b = new FlatButton(t[1]);
-                b.FitWidth();
+                var b = new FlatButton("") { Glyph = t[2], Width = Theme.S(36) };
                 b.Click += (s, e) => SetTool(id);
+                tips.SetToolTip(b, t[1]);
                 add(b);
                 toolButtons[id] = b;
             }
@@ -275,27 +277,26 @@ namespace ControlCenterK
             del.Click += (s, e) => DeleteSelected();
             add(undoB); add(redoB); add(del);
             gap();
-            var paste = new FlatButton("Coller une image") { Glyph = "" };
-            paste.FitWidth();
+            var paste = new FlatButton("") { Glyph = "", Width = Theme.S(36) };
             paste.Click += (s, e) => PasteImage();
             add(paste);
             gap();
-            var copy = new FlatButton("Copier") { Glyph = "" };
-            copy.FitWidth();
-            var saveAs = new FlatButton("Enregistrer sous…");
-            saveAs.FitWidth();
-            var save = new FlatButton("Enregistrer", true) { Glyph = "" };
-            save.FitWidth();
+            var copy = new FlatButton("") { Glyph = "", Width = Theme.S(36) };
+            var saveAs = new FlatButton("") { Glyph = "", Width = Theme.S(36) };
+            var save = new FlatButton("", true) { Glyph = "", Width = Theme.S(36) };
             add(copy); add(saveAs); add(save);
             save.Click += (s, e) => { using (var b = Render()) if (ScreenCapture.Save(b, null) != null) Close(); };
             saveAs.Click += (s, e) => { using (var b = Render()) if (ScreenCapture.SaveAs(b) != null) Close(); };
             copy.Click += (s, e) => { using (var b = Render()) ScreenCapture.Copy(b); };
-            var tips = new ToolTip();
+            tips.SetToolTip(copy, "Copier (Ctrl+C)");
+            tips.SetToolTip(saveAs, "Enregistrer sous…");
+            tips.SetToolTip(save, "Enregistrer (Ctrl+S)");
+            tips.SetToolTip(col, "Couleur");
             tips.SetToolTip(undoB, "Annuler (Ctrl+Z)");
             tips.SetToolTip(redoB, "Rétablir (Ctrl+Y)");
             tips.SetToolTip(del, "Supprimer l'élément sélectionné (Suppr)");
             tips.SetToolTip(paste, "Coller l'image du presse-papiers (Ctrl+V) ; on peut aussi glisser un fichier image");
-            tips.SetToolTip(toolButtons["select"], "Cliquer un élément pour le déplacer ; poignées pour le redimensionner ; Maj = proportions libres ; flèches = décaler ; Ctrl+D = dupliquer ; double-clic sur un texte = modifier");
+            tips.SetToolTip(toolButtons["select"], "Sélection : cliquer un élément pour le déplacer ; poignées pour le redimensionner ; Maj = proportions libres ; flèches = décaler ; Ctrl+D = dupliquer ; double-clic sur un texte = modifier");
 
             canvasHost = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Theme.Bg };
             canvasHost.HandleCreated += (s, e) => Theme.DarkScroll(canvasHost);
