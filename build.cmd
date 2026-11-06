@@ -16,11 +16,14 @@ if not exist src\app.ico (
 )
 
 rem 2. Application
+set LHM=
+for %%f in (src\Fans\lhm\*.dll) do call set "LHM=%%LHM%% /resource:%%f,lhm.%%~nxf"
 "%CSC%" /nologo /unsafe /codepage:65001 /target:winexe /optimize+ /platform:anycpu ^
   /win32manifest:src\app.manifest /win32icon:src\app.ico ^
   /resource:src\Share\driver\obs-virtualcam-module64.dll,obs-virtualcam-module64.dll ^
   /resource:src\Share\driver\obs-virtualcam-module32.dll,obs-virtualcam-module32.dll ^
   /resource:src\Fps\pawnio\AMDFamily17.bin,AMDFamily17.bin ^
+  %LHM% /r:src\Fans\lhm\LibreHardwareMonitorLib.dll ^
   /out:bin\ControlCenterK.exe %REFS% /recurse:src\*.cs || goto :fail
 echo OK : bin\ControlCenterK.exe
 

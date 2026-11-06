@@ -13,7 +13,7 @@ namespace ControlCenterK
     {
         readonly Engine engine;
         readonly Panel side, content;
-        readonly NavButton navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navShare, navCapture, navSettings;
+        readonly NavButton navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navShare, navCapture, navFans, navSettings;
         readonly Label capProfile, capAudio, capDevices, capGames;
         readonly List<int> separators = new List<int>(); // lignes de séparation de la barre latérale
         bool blockAbove;                                  // mise en page : un bloc précède (séparation à tracer)
@@ -25,6 +25,7 @@ namespace ControlCenterK
         FpsPage pFps;
         SharePage pShare;
         CapturePage pCapture;
+        FansPage pFans;
         AudioPage pAudio;
         SettingsPage pSettings;
         string current;
@@ -62,8 +63,9 @@ namespace ControlCenterK
             navFps = new NavButton(Glyphs.Fps, "Capteurs");
             navShare = new NavButton(Glyphs.Share, "Partage d'écran");
             navCapture = new NavButton(Glyphs.Capture, "Capture d'écran");
+            navFans = new NavButton(Glyphs.Fan, "Ventilateurs");
             navSettings = new NavButton(Glyphs.Settings, "Paramètres");
-            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navShare, navCapture, navSettings }) side.Controls.Add(n);
+            foreach (var n in new[] { navCtl, navRoute, navAudio, navMouse, navKeyboard, navFps, navShare, navCapture, navFans, navSettings }) side.Controls.Add(n);
             capAudio = Theme.Label("AUDIO", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
             capDevices = Theme.Label("PÉRIPHÉRIQUES", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
             capGames = Theme.Label("OUTILS", Theme.Ui(7.5f, FontStyle.Bold), Theme.Dim, Theme.Side);
@@ -73,6 +75,7 @@ namespace ControlCenterK
             navFps.Click += (s, e) => ShowPage("fps");
             navShare.Click += (s, e) => ShowPage("share");
             navCapture.Click += (s, e) => ShowPage("capture");
+            navFans.Click += (s, e) => ShowPage("fans");
             navCtl.Click += (s, e) => ShowPage("ctl");
             navRoute.Click += (s, e) => ShowPage("route");
             navAudio.Click += (s, e) => ShowPage("audio");
@@ -164,7 +167,7 @@ namespace ControlCenterK
             }
             y = NavSection(capAudio, y, new[] { navCtl, navRoute, navAudio }, new[] { cfg.ModMidi, cfg.ModRouter, true });
             y = NavSection(capDevices, y, new[] { navMouse, navKeyboard }, new[] { cfg.ModMouse, cfg.ModKeyboard });
-            y = NavSection(capGames, y, new[] { navFps, navShare, navCapture }, new[] { cfg.ModFps, cfg.ModShare, cfg.ModCapture });
+            y = NavSection(capGames, y, new[] { navFps, navShare, navCapture, navFans }, new[] { cfg.ModFps, cfg.ModShare, cfg.ModCapture, cfg.ModFans });
             // Paramètres : en bas à gauche, juste au-dessus de l'équipement connecté
             navSettings.SetBounds(0, side.ClientSize.Height - Theme.S(56) - navSettings.Height - Theme.S(4), side.Width, navSettings.Height);
             separators.Add(navSettings.Top - Theme.S(8));
@@ -211,6 +214,7 @@ namespace ControlCenterK
                 case "fps": page = pFps ?? (pFps = Add(new FpsPage(engine.Cfg))); break;
                 case "share": page = pShare ?? (pShare = Add(new SharePage(engine.Cfg))); break;
                 case "capture": page = pCapture ?? (pCapture = Add(new CapturePage(engine.Cfg))); break;
+                case "fans": page = pFans ?? (pFans = Add(new FansPage(engine.Cfg))); break;
                 default: key = "settings"; page = pSettings ?? (pSettings = Add(new SettingsPage(engine))); break;
             }
             current = key;
@@ -223,6 +227,7 @@ namespace ControlCenterK
             navFps.Selected = key == "fps";
             navShare.Selected = key == "share";
             navCapture.Selected = key == "capture";
+            navFans.Selected = key == "fans";
             navSettings.Selected = key == "settings";
             if (page == pAudio) pAudio.Reload();
             if (page == pSettings) pSettings.RefreshInfo();
@@ -250,9 +255,10 @@ namespace ControlCenterK
                 if (!cfg.ModFps && pFps != null) { content.Controls.Remove(pFps); pFps.Dispose(); pFps = null; }
                 if (!cfg.ModShare && pShare != null) { content.Controls.Remove(pShare); pShare.Dispose(); pShare = null; }
                 if (!cfg.ModCapture && pCapture != null) { content.Controls.Remove(pCapture); pCapture.Dispose(); pCapture = null; }
+                if (!cfg.ModFans && pFans != null) { content.Controls.Remove(pFans); pFans.Dispose(); pFans = null; }
                 LayoutNav();
                 if ((current == "ctl" && !cfg.ModMidi) || (current == "route" && !cfg.ModRouter) || (current == "mouse" && !cfg.ModMouse)
-                    || (current == "keyboard" && !cfg.ModKeyboard) || (current == "fps" && !cfg.ModFps) || (current == "share" && !cfg.ModShare) || (current == "capture" && !cfg.ModCapture)) ShowPage("settings");
+                    || (current == "keyboard" && !cfg.ModKeyboard) || (current == "fps" && !cfg.ModFps) || (current == "share" && !cfg.ModShare) || (current == "capture" && !cfg.ModCapture) || (current == "fans" && !cfg.ModFans)) ShowPage("settings");
                 UpdateStatus();
                 side.Invalidate();
             });

@@ -184,6 +184,11 @@ namespace ControlCenterK
         public bool ModFps { get; set; }                         // module "FPS"
         public bool ModShare { get; set; }                       // module "Partage d'écran" (KStS)
         public ShareConfig Share { get; set; }
+        public bool ModFans { get; set; }                        // module "Ventilateurs"
+        public Dictionary<string, string> FanNames { get; set; } // noms donnés aux prises (clé « appareil|prise »)
+        public Dictionary<string, FanSetting> Fans { get; set; } // réglages des prises (même clé)
+        public Dictionary<string, LedSetting> FanLeds { get; set; } // éclairage par zone
+        public Dictionary<string, string> FanRoles { get; set; } // pump : signal de pompe détecté ; fan : l'utilisateur a dit que non
         public bool ModCapture { get; set; }                     // module "Capture d'écran"
         public CaptureConfig Capture { get; set; }
         public FpsConfig Fps { get; set; }
@@ -207,6 +212,10 @@ namespace ControlCenterK
             Fps = new FpsConfig();
             Share = new ShareConfig();
             Capture = new CaptureConfig();
+            FanNames = new Dictionary<string, string>();
+            Fans = new Dictionary<string, FanSetting>();
+            FanRoles = new Dictionary<string, string>();
+            FanLeds = new Dictionary<string, LedSetting>();
             ModMidi = true;
             ModKeyboard = true;
             AutoUpdate = true;
@@ -273,6 +282,11 @@ namespace ControlCenterK
             if (Share == null) Share = new ShareConfig();
             Share.Fix();
             if (Capture == null) Capture = new CaptureConfig();
+            if (FanNames == null) FanNames = new Dictionary<string, string>();
+            if (Fans == null) Fans = new Dictionary<string, FanSetting>();
+            if (FanRoles == null) FanRoles = new Dictionary<string, string>();
+            if (FanLeds == null) FanLeds = new Dictionary<string, LedSetting>();
+            foreach (var f in Fans.Values) f.Fix();
             Capture.Fix();
             if (Router == null) Router = new RouterConfig();
             Router.Fix();
@@ -622,6 +636,6 @@ namespace ControlCenterK
         public const string Volume = "\uE767", Mic = "\uE720", Speaker = "\uE7F5", Headphone = "\uE7F6",
             App = "\uE7C4", Apps = "\uE71D", Focus = "\uE7F4", System = "\uE770", Settings = "\uE713",
             Mixer = "\uE9E9", Close = "\uE711", Add = "\uE710", Chevron = "\uE70D", Refresh = "\uE72C",
-            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Fps = "\uEC4A", Share = "\uE7F4", Capture = "\uE722", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
+            Check = "\uE73E", Folder = "\uE838", Info = "\uE946", Plug = "\uE957", Learn = "\uE7C9", Palette = "\uE790", Save = "\uE74E", Mouse = "\uE962", Route = "\uE8AB", Keyboard = "\uE765", Fps = "\uEC4A", Share = "\uE7F4", Capture = "\uE722", Fan = "\uE9CA", Loop = "\uE8EE", More = "\uE712", Power = "\uE7E8";
     }
 }

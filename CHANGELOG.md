@@ -2,6 +2,17 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.8] - 2026-11-06 (BETA)
+
+- Nouveau module « Ventilateurs » : détection des prises de la carte mère et des AIO USB, tours/min et températures
+  (LibreHardwareMonitor, lu par la sonde ; PawnIO requis).
+- Vitesse fixe ou courbe selon la température (processeur, carte graphique, liquide, carte mère), avec préréglages.
+- Repérage : « Identifier » fait varier un ventilateur et vérifie qu'il réagit ; « Arrêt 30 s » l'arrête, « Reprendre » le relance. Prises renommables.
+- Sécurités : 30 % minimum, retour au BIOS si l'application s'arrête ou si le processeur atteint 90 °C, plein régime si la température est illisible.
+- Pompes en lecture seule ; le signal de pompe branché sur la carte mère est reconnu et affiché avec l'AIO.
+- Éclairage : anneau et logo du Kraken X3, LED et prises ARGB des cartes ASUS Aura, avec effets.
+- Capture d'écran : bouton pour supprimer une capture de la liste (envoyée à la Corbeille).
+
 ## [0.7.3.2] - 2026-11-01 (BETA)
 
 - Éditeur de capture : boutons en icônes (nom affiché au survol), barre plus compacte.
