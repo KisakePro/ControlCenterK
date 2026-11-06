@@ -232,10 +232,12 @@ namespace ControlCenterK
                 when.Location = new Point(Theme.S(96), Theme.S(30));
                 row.Controls.AddRange(new Control[] { pic, name, when });
                 int right = row.Width - Theme.S(8);
-                foreach (var spec in new[] { "folder", "copy", "open" })
+                foreach (var spec in new[] { "delete", "folder", "copy", "open" })
                 {
-                    var b = new FlatButton(spec == "open" ? "Ouvrir" : spec == "copy" ? "Copier" : "Dossier") { Anchor = AnchorStyles.Top | AnchorStyles.Right };
-                    b.FitWidth();
+                    var b = spec == "delete" ? new FlatButton("") { Glyph = "", Width = Theme.S(36), Height = Theme.S(32) }
+                                              : new FlatButton(spec == "open" ? "Ouvrir" : spec == "copy" ? "Copier" : "Dossier");
+                    b.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                    if (spec != "delete") b.FitWidth();
                     b.Location = new Point(right - b.Width, Theme.S(11));
                     right = b.Left - Theme.S(6);
                     string sp = spec;
@@ -243,6 +245,7 @@ namespace ControlCenterK
                     {
                         try
                         {
+                            if (sp == "delete") { Delete(path); return; }
                             if (sp == "open") Process.Start(path);
                             else if (sp == "folder") Process.Start("explorer.exe", "/select,\"" + path + "\"");
                             else using (var img = Image.FromFile(path)) ScreenCapture.Copy(img);
@@ -257,5 +260,32 @@ namespace ControlCenterK
             SetNextY(c, y);
             return c;
         }
+
+        /// <summary>Envoie la capture à la Corbeille (après confirmation) et la retire de la liste.</summary>
+        void Delete(string path)
+        {
+            if (MessageBox.Show(FindForm(), "Supprimer « " + Path.GetFileName(path) + " » ?\nLe fichier sera envoyé à la Corbeille.",
+                    "Supprimer la capture", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            var op = new SHFILEOPSTRUCT { wFunc = 3, pFrom = path + "\0\0", fFlags = 0x0040 | 0x0010 | 0x0400 | 0x0004 };
+            if (File.Exists(path) && SHFileOperation(ref op) != 0)
+            {
+                MessageBox.Show(FindForm(), "Impossible de supprimer le fichier.", "Supprimer la capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            lock (AppConfig.Sync) C.Recent.RemoveAll(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase));
+            cfg.Save();
+            Rebuild();
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        struct SHFILEOPSTRUCT
+        {
+            public IntPtr hwnd; public uint wFunc; public string pFrom; public string pTo; public ushort fFlags;
+            public bool fAnyOperationsAborted; public IntPtr hNameMappings; public string lpszProgressTitle;
+        }
+
+        // FO_DELETE = 3 ; FOF_ALLOWUNDO (Corbeille) | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT
+        [System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        static extern int SHFileOperation(ref SHFILEOPSTRUCT op);
     }
 }

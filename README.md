@@ -1,12 +1,12 @@
 # ControlCenterK
 
-**Le centre de contrôle léger de votre PC Windows : son, contrôleurs MIDI, souris, clavier, affichage en jeu, partage et capture d'écran, réunis dans une seule application sombre, rapide et sans compte.**
+**Le centre de contrôle léger de votre PC Windows : son, contrôleurs MIDI, souris, clavier, affichage en jeu, partage et capture d'écran, ventilateurs et éclairage, réunis dans une seule application sombre, rapide et sans compte.**
 
 ControlCenterK remplace une pile de logiciels (mixeur MIDI, console de routage audio, logiciels de souris et de clavier des fabricants, overlay de FPS, outil de capture d'écran…) par un seul petit exécutable. Il reste discret dans la zone de notification, et chaque fonction est un **module** que l'on active ou non : un module désactivé ne charge rien du tout.
 
 [**⬇ Télécharger la dernière version**](https://github.com/KisakePro/ControlCenterK/releases/latest) · Windows 10 / 11 · installation sans droits administrateur
 
-> La série **0.7** est publiée en **BETA** (« Pre-release ») : [toutes les versions](https://github.com/KisakePro/ControlCenterK/releases).
+> Les séries **0.7** et **0.8** sont publiées en **BETA** (« Pre-release ») : [toutes les versions](https://github.com/KisakePro/ControlCenterK/releases).
 
 ![Contrôleur](docs/controleur.png)
 
@@ -24,6 +24,7 @@ ControlCenterK remplace une pile de logiciels (mixeur MIDI, console de routage a
 | Outils | 📈 **Capteurs** | FPS, CPU, GPU et RAM affichés par-dessus vos jeux |
 | Outils | 📡 **Partage d'écran** | une zone de l'écran envoyée à Discord comme une webcam |
 | Outils | 📸 **Capture d'écran** | Impr. écran façon ShareX, avec éditeur |
+| Outils | 🌀 **Ventilateurs** | vitesses selon la température, éclairage et effets |
 
 ---
 
@@ -94,8 +95,16 @@ Partagez **une zone de l'écran sur Discord comme une webcam** (« KStS Virtual 
 Comme ShareX :
 - **Impr. écran** fige l'écran : glisser = zone, clic = fenêtre, Entrée = écran entier. **Ctrl+Impr** = écran sous la souris, **Alt+Impr** = fenêtre active.
 - Un **menu** apparaît à côté de la sélection : copier, enregistrer, copier et enregistrer, enregistrer sous, ouvrir l'éditeur.
-- **Éditeur** : rectangle, flèche, crayon, surligneur, texte, floutage, couleur, épaisseur, annuler / rétablir.
+- **Éditeur** : sélection (déplacer, redimensionner), rectangle, ellipse, ligne, flèche, crayon, surligneur, texte, numéros, floutage, images collées (Ctrl+V), couleur, épaisseur, annuler / rétablir.
 - Dossier, nom des fichiers, PNG ou JPEG, action par défaut, liste des dernières captures.
+
+### 🌀 Ventilateurs
+- **Détection** des prises de la carte mère et des AIO USB, avec tours/min et températures ; à vérifier selon la carte (portables et PC de marque souvent non pris en charge).
+- **Vitesse fixe ou courbe** selon la température du processeur, de la carte graphique, du liquide ou de la carte mère, avec préréglages.
+- **Repérage** : « Identifier » fait varier un ventilateur, « Arrêt 30 s » l'arrête le temps de le trouver ; chaque prise se renomme.
+- **Sécurités** : 30 % minimum, retour au BIOS si l'application s'arrête ou si le processeur atteint 90 °C, plein régime si la température est illisible. Les pompes restent en lecture seule.
+- **Éclairage** et effets : anneau et logo du NZXT Kraken X3, LED et prises ARGB des cartes ASUS Aura.
+- Utilise la sonde et le pilote [PawnIO](https://pawnio.eu). Un PC figé ou une sonde tuée laisse la dernière vitesse en place.
 
 ### 🎨 Et aussi
 - **Thème sombre** personnalisable : couleur d'accent, teinte du fond, thèmes enregistrés.
@@ -116,7 +125,7 @@ Fermer la fenêtre ne quitte pas l'application : elle reste dans la zone de noti
 > - Fermez les logiciels des fabricants (iCUE, G HUB, Synapse, SteelSeries GG) : ils imposeraient leurs propres réglages.
 > - Les réglages de souris et de clavier sont envoyés **en direct** : rien n'est écrit dans la mémoire interne de vos périphériques.
 > - Les modèles non testés sont signalés « expérimental » dans l'application.
-> - Quelques fonctions demandent une confirmation administrateur **une seule fois** : caméra virtuelle du partage d'écran, sonde de température du processeur.
+> - Quelques fonctions demandent une confirmation administrateur **une seule fois** : caméra virtuelle du partage d'écran, sonde (température du processeur, ventilateurs).
 > - L'affichage en jeu fonctionne en fenêtré et en plein écran fenêtré (le plein écran exclusif masque les fenêtres par-dessus).
 > - Les périphériques audio virtuels utilisent le pilote libre [usbip-win2](https://github.com/vadimgrn/usbip-win2), à installer une fois.
 
@@ -141,6 +150,7 @@ src/Keyboard/                          détection, pilotes et effets des clavier
 src/Fps/                               capteurs : FPS (ETW), CPU / GPU / RAM, sonde PawnIO, affichage en jeu
 src/Share/                             partage d'écran : caméra virtuelle, zones
 src/Capture/                           capture d'écran : écran figé, menu, éditeur
+src/Fans/                              ventilateurs (LibreHardwareMonitor, sécurités, courbes) et éclairage
 src/UI/                                interface
 setup/                                 installateur
 ```
@@ -152,4 +162,6 @@ setup/                                 installateur
 - Protocoles des périphériques : [OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB), [openrazer](https://github.com/openrazer/openrazer), [rivalcfg](https://github.com/flozz/rivalcfg), [libratbag](https://github.com/libratbag/libratbag), [ckb-next](https://github.com/ckb-next/ckb-next).
 - Caméra virtuelle : module caméra virtuelle d'[OBS Studio](https://github.com/obsproject/obs-studio) (GPL-2.0), embarqué.
 - Sonde de température : [PawnIO](https://github.com/namazso/PawnIO) et son module `AMDFamily17` ([PawnIO.Modules](https://github.com/namazso/PawnIO.Modules), LGPL-2.1), embarqué.
+- Ventilateurs : [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0) et ses dépendances, embarqués.
+- Protocoles d'éclairage : [liquidctl](https://github.com/liquidctl/liquidctl) (Kraken), [OpenRGB](https://gitlab.com/CalcProgrammer1/OpenRGB) (Aura).
 - Mesure des FPS inspirée de [PresentMon](https://github.com/GameTechDev/PresentMon).

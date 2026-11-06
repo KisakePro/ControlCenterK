@@ -347,7 +347,9 @@ namespace ControlCenterK
                 cfg.ModShare, v => cfg.ModShare = v);
             AddModule(Theme.S(70) + 6 * Theme.S(66), Glyphs.Capture, "Capture d'écran", "Impr. écran façon ShareX : zone, fenêtre ou écran, puis copier, enregistrer ou annoter dans l'éditeur.",
                 cfg.ModCapture, v => cfg.ModCapture = v);
-            modCard.Height = Theme.S(70) + 7 * Theme.S(66) + Theme.S(8);
+            AddModule(Theme.S(70) + 7 * Theme.S(66), Glyphs.Fan, "Ventilateurs", "Ventilateurs de la carte mère et de l'AIO : détection, identification, vitesse fixe ou courbe selon la température, éclairage et effets.",
+                cfg.ModFans, v => cfg.ModFans = v);
+            modCard.Height = Theme.S(70) + 8 * Theme.S(66) + Theme.S(8);
         }
 
         void AddModule(int y, string glyph, string label, string desc, bool value, Action<bool> apply)

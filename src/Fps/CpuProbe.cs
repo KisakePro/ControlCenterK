@@ -39,6 +39,7 @@ namespace ControlCenterK
             string exe = Process.GetCurrentProcess().MainModule.FileName;
             string user = WindowsIdentity.GetCurrent().Name;
             string script =
+                "Stop-ScheduledTask -TaskName '" + TaskName + "' -ErrorAction SilentlyContinue\r\n" +
                 "$a = New-ScheduledTaskAction -Execute '" + exe.Replace("'", "''") + "' -Argument '--sonde'\r\n" +
                 "$t = New-ScheduledTaskTrigger -AtLogOn -User '" + user.Replace("'", "''") + "'\r\n" +
                 "$p = New-ScheduledTaskPrincipal -UserId '" + user.Replace("'", "''") + "' -LogonType Interactive -RunLevel Highest\r\n" +
@@ -127,6 +128,22 @@ namespace ControlCenterK
 
         /// <summary>Boucle de la sonde : lit Tctl deux fois par seconde tant que ControlCenterK tourne.</summary>
         public static void RunProbe()
+        {
+            // les ventilateurs ne dépendent pas de la température Ryzen : ils doivent marcher aussi sur les autres processeurs
+            var fans = new Thread(FanHost.Run) { IsBackground = true };
+            fans.Start();
+            try { RunTemperature(); } catch { }
+            int idle = 0;
+            while (idle < 3)
+            {
+                idle = Process.GetProcessesByName("ControlCenterK").Length > 1 ? 0 : idle + 1;
+                Thread.Sleep(500);
+            }
+            FanHost.RequestStop();
+            fans.Join(3000);
+        }
+
+        static void RunTemperature()
         {
             IntPtr h;
             if (!PawnIOInstalled || pawnio_open(out h) != 0) return;
