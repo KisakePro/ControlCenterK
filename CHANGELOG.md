@@ -2,6 +2,10 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.8.1] - 2026-11-11 (BETA)
+
+- Éclairage : curseur de puissance (0 à 100 %) pour chaque zone, en couleur fixe, respiration et pulsation.
+
 ## [0.8] - 2026-11-06 (BETA)
 
 - Nouveau module « Ventilateurs » : détection des prises de la carte mère et des AIO USB, tours/min et températures

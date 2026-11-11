@@ -164,16 +164,22 @@ namespace ControlCenterK
                 speed.Add("2", "Rapide");
                 speed.Value = st.Speed.ToString();
                 speed.Location = new Point(col.Left - speed.Width - Theme.S(6), Theme.S(8));
+                var light = new LedSlider { Value = st.Brightness ?? 100, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                light.Bounds = new Rectangle((z.HasSpeed ? speed.Left : col.Left) - Theme.S(186), Theme.S(8), Theme.S(180), Theme.S(32));
+                new ToolTip().SetToolTip(light, "Puissance de l'éclairage (couleur fixe, respiration, pulsation : les effets arc-en-ciel gardent leur intensité)");
                 var fail = Theme.Label("", Theme.Ui(8.5f), Theme.Red, row.BackColor);
                 fail.Location = new Point(Theme.S(12), Theme.S(30));
                 Action send = () =>
                 {
                     int rgb = col.BackColor.ToArgb() & 0xFFFFFF;
-                    bool ok = LedControl.Set(zone, new LedSetting { Mode = mode.Value, Color = rgb, Speed = int.Parse(speed.Value) });
+                    bool ok = LedControl.Set(zone, new LedSetting { Mode = mode.Value, Color = rgb, Speed = int.Parse(speed.Value), Brightness = light.Value });
                     fail.Text = ok ? "" : "L'appareil n'a pas répondu";
                 };
-                mode.ValueChanged += (s, e) => send();
+                Action dim = () => light.Enabled = mode.Value != "cycle" && mode.Value != "rainbow" && mode.Value != "off";
+                dim();
+                mode.ValueChanged += (s, e) => { dim(); send(); };
                 speed.ValueChanged += (s, e) => send();
+                light.Released += () => { if (mode.Value != "none") send(); };
                 col.Click += (s, e) =>
                 {
                     using (var dlg = new ColorDialog { FullOpen = true, Color = col.BackColor })
@@ -183,7 +189,7 @@ namespace ControlCenterK
                             if (mode.Value != "none") send();
                         }
                 };
-                row.Controls.AddRange(new Control[] { mode, col, speed, fail });
+                row.Controls.AddRange(new Control[] { mode, col, speed, light, fail });
                 c.Controls.Add(row);
                 y += Theme.S(54);
             }
@@ -472,6 +478,56 @@ namespace ControlCenterK
                     l.Text = text;
                 }
             }
+        }
+    }
+    /// <summary>Curseur de puissance de l'éclairage (0 à 100 %) ; Released quand on lâche la souris.</summary>
+    sealed class LedSlider : DarkControl
+    {
+        int value = 100;
+        bool dragging;
+        public event Action Released;
+
+        public LedSlider() { Cursor = Cursors.Hand; }
+
+        public int Value
+        {
+            get { return value; }
+            set { this.value = Math.Max(0, Math.Min(100, value)); Invalidate(); }
+        }
+
+        Rectangle Track { get { int label = Theme.S(42); return new Rectangle(Theme.S(8), Height / 2 - Theme.S(2), Width - label - Theme.S(16), Theme.S(4)); } }
+
+        void Pick(int x)
+        {
+            var t = Track;
+            Value = (int)Math.Round((x - t.Left) * 100.0 / Math.Max(1, t.Width));
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e) { base.OnMouseDown(e); if (!Enabled || e.Button != MouseButtons.Left) return; dragging = true; Pick(e.X); }
+        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); if (dragging) Pick(e.X); }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (!dragging) return;
+            dragging = false;
+            if (Released != null) Released();
+        }
+
+        protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = Prepare(e);
+            var t = Track;
+            Color on = Enabled ? Theme.Accent : Theme.Dim;
+            Theme.FillRound(g, Theme.SurfaceHi, t, Theme.S(2));
+            int x = t.Left + (int)Math.Round(value * t.Width / 100.0);
+            if (x > t.Left) Theme.FillRound(g, on, new RectangleF(t.Left, t.Top, x - t.Left, t.Height), Theme.S(2));
+            int k = Theme.S(14);
+            using (var b = new SolidBrush(Enabled ? Color.White : Theme.Muted)) g.FillEllipse(b, x - k / 2, Height / 2 - k / 2, k, k);
+            TextRenderer.DrawText(g, value + " %", Theme.Ui(8.5f), new Rectangle(Width - Theme.S(44), 0, Theme.S(42), Height),
+                Enabled ? Theme.Text : Theme.Dim, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
         }
     }
 }

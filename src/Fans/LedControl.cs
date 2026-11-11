@@ -12,6 +12,7 @@ namespace ControlCenterK
         public string Mode { get; set; }    // none (on n'y touche pas), off, fixed, breathing, pulse, cycle, rainbow
         public int Color { get; set; }      // 0xRRGGBB
         public int Speed { get; set; }      // 0 lent, 1 normal, 2 rapide (Kraken)
+        public int? Brightness { get; set; } // puissance en % (absente dans les anciens réglages : 100 %)
     }
 
     /// <summary>Une zone d'éclairage détectée.</summary>
@@ -104,7 +105,7 @@ namespace ControlCenterK
         {
             LedSetting s;
             lock (AppConfig.Sync) if (cfg != null && cfg.FanLeds.TryGetValue(key, out s)) return s;
-            return new LedSetting { Mode = "none", Color = 0xFFFFFF, Speed = 1 };
+            return new LedSetting { Mode = "none", Color = 0xFFFFFF, Speed = 1, Brightness = 100 };
         }
 
         /// <summary>Enregistre le réglage et l'envoie à la zone ; false si l'appareil n'a pas répondu.</summary>
@@ -118,6 +119,17 @@ namespace ControlCenterK
                 try { return z.Apply(s); }
                 catch { return false; }
             }
+        }
+
+        /// <summary>
+        /// Couleur à la puissance demandée. Ces contrôleurs n'ont pas de réglage de luminosité : on assombrit la couleur
+        /// envoyée, ce qui ne touche donc pas les effets arc-en-ciel, dont le matériel choisit les couleurs.
+        /// </summary>
+        static int Dimmed(LedSetting s)
+        {
+            int pct = Math.Max(0, Math.Min(100, s.Brightness ?? 100));
+            int r = (s.Color >> 16 & 0xFF) * pct / 100, g = (s.Color >> 8 & 0xFF) * pct / 100, b = (s.Color & 0xFF) * pct / 100;
+            return r << 16 | g << 8 | b;
         }
 
         #region NZXT Kraken X3
@@ -157,9 +169,10 @@ namespace ControlCenterK
             r[5] = (byte)(speed & 0xFF); r[6] = (byte)(speed >> 8);
             if (colored)
             {
-                r[7] = (byte)(s.Color >> 8);        // vert
-                r[8] = (byte)(s.Color >> 16);       // rouge
-                r[9] = (byte)s.Color;               // bleu
+                int c = Dimmed(s);
+                r[7] = (byte)(c >> 8);              // vert
+                r[8] = (byte)(c >> 16);             // rouge
+                r[9] = (byte)c;                     // bleu
             }
             int foot = 7 + 16 * 3;
             r[foot + 1] = 1;                        // nombre de couleurs
@@ -243,6 +256,7 @@ namespace ControlCenterK
             fx[0] = 0xEC; fx[1] = 0x35; fx[2] = (byte)effect; fx[5] = mode;
             if (!ch.Write(fx)) return false;
             if (startLed + leds > 20) return true; // hors du rapport : l'effet est posé, sans couleur
+            int dimmed = Dimmed(s);
             int mask = ((1 << leds) - 1) << startLed;
             var col = new byte[65];
             col[0] = 0xEC; col[1] = 0x36;
@@ -250,9 +264,9 @@ namespace ControlCenterK
             for (int i = 0; i < leds; i++)
             {
                 int o = 5 + 3 * (startLed + i);
-                col[o] = (byte)(s.Color >> 16);
-                col[o + 1] = (byte)(s.Color >> 8);
-                col[o + 2] = (byte)s.Color;
+                col[o] = (byte)(dimmed >> 16);
+                col[o + 1] = (byte)(dimmed >> 8);
+                col[o + 2] = (byte)dimmed;
             }
             return ch.Write(col);
         }
