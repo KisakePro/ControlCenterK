@@ -99,6 +99,9 @@ namespace ControlCenterK
             // Capture d'écran : touche Impr. écran interceptée seulement si le module est actif
             if (Cfg.ModCapture) ScreenCapture.Enable(Cfg);
             else ScreenCapture.Disable();
+            // Capture vidéo : seul le raccourci est actif tant qu'on n'enregistre pas
+            if (Cfg.ModVideo) VideoRecorder.Enable(Cfg);
+            else VideoRecorder.Disable();
             // Ventilateurs : la sonde ne charge rien et le BIOS garde la main si le module est inactif
             if (Cfg.ModFans) { FanControl.Enable(Cfg); LedControl.Start(Cfg); }
             else { FanControl.Disable(); LedControl.Stop(); }
@@ -130,6 +133,7 @@ namespace ControlCenterK
             ScreenShare.Disable(); // libère la caméra virtuelle et les raccourcis
             ScreenCapture.Disable(); // rend la touche Impr. écran
             FanControl.Disable(); // rend les ventilateurs au BIOS
+            VideoRecorder.Disable(); // termine proprement une vidéo en cours
             LedControl.Stop();
             if (Router != null) { Engine.Router = null; Router.Dispose(); Router = null; }
             VirtualHost.Stop();

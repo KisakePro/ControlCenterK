@@ -266,8 +266,7 @@ namespace ControlCenterK
         {
             if (MessageBox.Show(FindForm(), "Supprimer « " + Path.GetFileName(path) + " » ?\nLe fichier sera envoyé à la Corbeille.",
                     "Supprimer la capture", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            var op = new SHFILEOPSTRUCT { wFunc = 3, pFrom = path + "\0\0", fFlags = 0x0040 | 0x0010 | 0x0400 | 0x0004 };
-            if (File.Exists(path) && SHFileOperation(ref op) != 0)
+            if (!Recycle(path))
             {
                 MessageBox.Show(FindForm(), "Impossible de supprimer le fichier.", "Supprimer la capture", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -275,6 +274,14 @@ namespace ControlCenterK
             lock (AppConfig.Sync) C.Recent.RemoveAll(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase));
             cfg.Save();
             Rebuild();
+        }
+
+        /// <summary>Envoie un fichier à la Corbeille ; true s'il n'existe plus.</summary>
+        internal static bool Recycle(string path)
+        {
+            if (!File.Exists(path)) return true;
+            var op = new SHFILEOPSTRUCT { wFunc = 3, pFrom = path + "\0\0", fFlags = 0x0040 | 0x0010 | 0x0400 | 0x0004 };
+            return SHFileOperation(ref op) == 0;
         }
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
