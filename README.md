@@ -1,12 +1,12 @@
 # ControlCenterK
 
-**Le centre de contrôle léger de votre PC Windows : son, contrôleurs MIDI, souris, clavier, affichage en jeu, partage et capture d'écran, ventilateurs et éclairage, réunis dans une seule application sombre, rapide et sans compte.**
+**Le centre de contrôle léger de votre PC Windows : son, contrôleurs MIDI, souris, clavier, affichage en jeu, partage, capture d'écran et vidéo, ventilateurs et éclairage, réunis dans une seule application sombre, rapide et sans compte.**
 
 ControlCenterK remplace une pile de logiciels (mixeur MIDI, console de routage audio, logiciels de souris et de clavier des fabricants, overlay de FPS, outil de capture d'écran…) par un seul petit exécutable. Il reste discret dans la zone de notification, et chaque fonction est un **module** que l'on active ou non : un module désactivé ne charge rien du tout.
 
 [**⬇ Télécharger la dernière version**](https://github.com/KisakePro/ControlCenterK/releases/latest) · Windows 10 / 11 · installation sans droits administrateur
 
-> Les séries **0.7** et **0.8** sont publiées en **BETA** (« Pre-release ») : [toutes les versions](https://github.com/KisakePro/ControlCenterK/releases).
+> Les séries **0.7** à **0.9** sont publiées en **BETA** (« Pre-release ») : [toutes les versions](https://github.com/KisakePro/ControlCenterK/releases).
 
 ![Contrôleur](docs/controleur.png)
 
@@ -24,6 +24,7 @@ ControlCenterK remplace une pile de logiciels (mixeur MIDI, console de routage a
 | Outils | 📈 **Capteurs** | FPS, CPU, GPU et RAM affichés par-dessus vos jeux |
 | Outils | 📡 **Partage d'écran** | une zone de l'écran envoyée à Discord comme une webcam |
 | Outils | 📸 **Capture d'écran** | Impr. écran façon ShareX, avec éditeur |
+| Outils | 🎬 **Capture vidéo** | une zone de l'écran en MP4, WMV ou AVI, avec le son |
 | Outils | 🌀 **Ventilateurs** | vitesses selon la température, éclairage et effets |
 
 ---
@@ -98,6 +99,12 @@ Comme ShareX :
 - **Éditeur** : sélection (déplacer, redimensionner), rectangle, ellipse, ligne, flèche, crayon, surligneur, texte, numéros, floutage, images collées (Ctrl+V), couleur, épaisseur, annuler / rétablir.
 - Dossier, nom des fichiers, PNG ou JPEG, action par défaut, liste des dernières captures.
 
+### 🎬 Capture vidéo
+- Enregistre **une zone** (choisie à la souris) ou **l'écran sous la souris**, curseur compris ; raccourci **Ctrl+Alt+F11** pour démarrer et arrêter.
+- **MP4** (H.264 + AAC) ou **WMV** encodés par Windows (carte graphique si possible), ou **AVI** Motion JPEG pour le montage (4 Go au plus).
+- **Son du PC**, **micro** ou les deux ; **taille de sortie** (d'origine, 4K, 1440p, 1080p, 720p, 480p) ; **10 à 60 images/s** ; trois qualités.
+- Le cadre rouge et le panneau d'arrêt n'apparaissent pas dans la vidéo. Les jeux en plein écran exclusif peuvent donner une image noire.
+
 ### 🌀 Ventilateurs
 - **Détection** des prises de la carte mère et des AIO USB, avec tours/min et températures ; à vérifier selon la carte (portables et PC de marque souvent non pris en charge).
 - **Vitesse fixe ou courbe** selon la température du processeur, de la carte graphique, du liquide ou de la carte mère, avec préréglages.
@@ -150,6 +157,7 @@ src/Keyboard/                          détection, pilotes et effets des clavier
 src/Fps/                               capteurs : FPS (ETW), CPU / GPU / RAM, sonde PawnIO, affichage en jeu
 src/Share/                             partage d'écran : caméra virtuelle, zones
 src/Capture/                           capture d'écran : écran figé, menu, éditeur
+src/Video/                             capture vidéo : copie d'écran, son WASAPI, encodeurs MP4 / WMV / AVI
 src/Fans/                              ventilateurs (LibreHardwareMonitor, sécurités, courbes) et éclairage
 src/UI/                                interface
 setup/                                 installateur

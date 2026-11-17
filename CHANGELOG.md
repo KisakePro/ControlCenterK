@@ -2,6 +2,13 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.9] - 2026-11-17 (BETA)
+
+- Nouveau module « Capture vidéo » : enregistre une zone de l'écran ou l'écran sous la souris, curseur compris.
+- Formats : MP4 (H.264 + AAC), WMV (WMV + WMA) par Media Foundation, intégré à Windows ; AVI (Motion JPEG + PCM, 4 Go au plus).
+- Son du PC, micro ou les deux (48 kHz stéréo) ; taille de sortie (d'origine, 4K, 1440p, 1080p, 720p, 480p) ; 10 à 60 images/s ; trois qualités.
+- Cadre rouge et panneau d'arrêt exclus de la vidéo ; raccourci Ctrl+Alt+F11 ; liste des dernières vidéos (ouvrir, dossier, supprimer).
+
 ## [0.8.1] - 2026-11-11 (BETA)
 
 - Éclairage : curseur de puissance (0 à 100 %) pour chaque zone, en couleur fixe, respiration et pulsation.
