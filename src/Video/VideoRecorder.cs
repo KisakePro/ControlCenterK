@@ -17,7 +17,13 @@ namespace ControlCenterK
         public string Audio { get; set; }        // none, system, mic, both
         public string Quality { get; set; }      // low, medium, high
         public bool Cursor { get; set; }         // inclure le curseur
-        public bool HotKey { get; set; }         // Ctrl+Alt+F11 : choisir une zone et enregistrer / arrêter
+        public bool HotKey { get; set; }         // raccourcis actifs
+        public string KeyToggle { get; set; }    // démarrer / arrêter (zone choisie) ; "" = aucun
+        public string KeyPick { get; set; }      // tracer une nouvelle zone (elle devient la zone choisie)
+        public string KeyPickRecord { get; set; } // tracer une zone et enregistrer tout de suite
+        public List<ShareZone> Zones { get; set; } // zones enregistrées
+        public string Selected { get; set; }     // id de la zone choisie ; "screen" = écran sous la souris
+        public bool ShowFrame { get; set; }      // cadre permanent autour de la zone choisie
         public string Folder { get; set; }       // "" = Vidéos\ControlCenterK
         public List<string> Recent { get; set; } // dernières vidéos
 
@@ -30,6 +36,11 @@ namespace ControlCenterK
             Quality = "medium";
             Cursor = true;
             HotKey = true;
+            KeyToggle = "Ctrl+Alt+F11";
+            KeyPick = "Ctrl+Shift+F11";
+            KeyPickRecord = "";
+            Zones = new List<ShareZone>();
+            Selected = "screen";
             Folder = "";
             Recent = new List<string>();
         }
@@ -43,6 +54,19 @@ namespace ControlCenterK
             if (Quality != "low" && Quality != "high") Quality = "medium";
             if (Folder == null) Folder = "";
             if (Recent == null) Recent = new List<string>();
+            if (Zones == null) Zones = new List<ShareZone>();
+            if (KeyToggle == null) KeyToggle = "Ctrl+Alt+F11";
+            if (KeyPick == null) KeyPick = "Ctrl+Shift+F11";
+            if (KeyPickRecord == null) KeyPickRecord = "";
+            if (Selected != "screen" && Find(Selected) == null) Selected = "screen";
+        }
+
+        public ShareZone Find(string id) { return Zones.Find(z => z.Id == id); }
+
+        public string NextColor()
+        {
+            foreach (var c in ShareConfig.Palette) if (!Zones.Exists(z => string.Equals(z.Color, c, StringComparison.OrdinalIgnoreCase))) return c;
+            return ShareConfig.Palette[Zones.Count % ShareConfig.Palette.Length];
         }
 
         public string FolderPath
@@ -65,6 +89,8 @@ namespace ControlCenterK
     {
         static AppConfig cfg;
         static VideoHotKey hotKey;
+        static BorderFrame preview;
+        static System.Windows.Forms.Timer previewTimer;
         static volatile bool stopping;
         static Thread capture, encoder;
         static BorderFrame frame;
@@ -84,29 +110,120 @@ namespace ControlCenterK
         {
             cfg = c;
             UpdateHotKey();
+            RefreshPreview();
         }
 
         public static void Disable()
         {
             Stop();
             if (hotKey != null) { hotKey.Dispose(); hotKey = null; }
+            HidePreview();
         }
+
+        /// <summary>Raccourcis refusés par Windows (déjà pris par un autre programme).</summary>
+        public static List<string> HotKeyFailures = new List<string>();
 
         public static void UpdateHotKey()
         {
-            bool want;
-            lock (AppConfig.Sync) want = cfg != null && C.HotKey;
-            if (want && hotKey == null) hotKey = new VideoHotKey(() => { if (Recording) Stop(); else PickAndStart(); });
-            else if (!want && hotKey != null) { hotKey.Dispose(); hotKey = null; }
+            if (hotKey != null) { hotKey.Dispose(); hotKey = null; }
+            HotKeyFailures = new List<string>();
+            if (cfg == null) return;
+            string toggle, pick, pickRecord;
+            bool on;
+            lock (AppConfig.Sync) { on = C.HotKey; toggle = C.KeyToggle; pick = C.KeyPick; pickRecord = C.KeyPickRecord; }
+            if (!on) return;
+            hotKey = new VideoHotKey();
+            if (!hotKey.Add(toggle, Toggle)) HotKeyFailures.Add(toggle);
+            if (!hotKey.Add(pick, () => { if (!Recording) PickZone(false); })) HotKeyFailures.Add(pick);
+            if (!hotKey.Add(pickRecord, () => { if (Recording) Stop(); else PickZone(true); })) HotKeyFailures.Add(pickRecord);
+        }
+
+        /// <summary>Démarre sur la zone choisie, ou arrête.</summary>
+        public static void Toggle()
+        {
+            if (Recording) { Stop(); return; }
+            string sel;
+            Rectangle r = Rectangle.Empty;
+            lock (AppConfig.Sync)
+            {
+                sel = C.Selected;
+                var z = C.Find(sel);
+                if (z != null) r = z.Rect;
+            }
+            if (sel == "screen" || r.Width < 16 || r.Height < 16) StartScreen();
+            else Start(r);
+        }
+
+        /// <summary>Trace une nouvelle zone à la souris ; elle est enregistrée et devient la zone choisie.</summary>
+        public static void PickZone(bool record)
+        {
+            ZoneSelector.Pick(r =>
+            {
+                if (!r.HasValue || r.Value.Width < 16 || r.Value.Height < 16) return;
+                AddZone(r.Value);
+                if (record) Start(r.Value);
+            });
+        }
+
+        public static ShareZone AddZone(Rectangle r)
+        {
+            var z = new ShareZone { Id = Guid.NewGuid().ToString("N").Substring(0, 8), X = r.X, Y = r.Y, W = r.Width, H = r.Height };
+            lock (AppConfig.Sync)
+            {
+                int n = 1;
+                while (C.Zones.Exists(x => x.Name == "Zone " + n)) n++;
+                z.Name = "Zone " + n;
+                z.Color = C.NextColor();
+                C.Zones.Add(z);
+                C.Selected = z.Id;
+            }
+            cfg.Save();
+            Flash();
+            Raise();
+            return z;
+        }
+
+        public static void Select(string id)
+        {
+            lock (AppConfig.Sync) C.Selected = id;
+            cfg.Save();
+            Flash();
+            Raise();
+        }
+
+        /// <summary>Zone choisie actuellement (null = écran sous la souris).</summary>
+        public static ShareZone SelectedZone
+        {
+            get { lock (AppConfig.Sync) return cfg == null ? null : C.Find(C.Selected); }
+        }
+
+        /// <summary>Cadre de la zone choisie : permanent si l'option est active, sinon montré 2 s après un changement.</summary>
+        public static void Flash() { RefreshPreview(true); }
+
+        public static void RefreshPreview() { RefreshPreview(false); }
+
+        static void RefreshPreview(bool flash)
+        {
+            HidePreview();
+            if (cfg == null || Recording) return;
+            bool always;
+            lock (AppConfig.Sync) always = C.ShowFrame;
+            var z = SelectedZone;
+            if (z == null || (!always && !flash)) return;
+            preview = new BorderFrame(z.Rect, Theme.FromHex(z.Color, Color.Red), 2);
+            if (always) return;
+            previewTimer = new System.Windows.Forms.Timer { Interval = 2000 };
+            previewTimer.Tick += (s, e) => HidePreview();
+            previewTimer.Start();
+        }
+
+        static void HidePreview()
+        {
+            if (previewTimer != null) { previewTimer.Dispose(); previewTimer = null; }
+            if (preview != null) { preview.Close(); preview.Dispose(); preview = null; }
         }
 
         static void Raise() { var h = Changed; if (h != null) h(); }
-
-        public static void PickAndStart()
-        {
-            if (Recording) return;
-            ZoneSelector.Pick(r => { if (r.HasValue && r.Value.Width >= 16 && r.Value.Height >= 16) Start(r.Value); });
-        }
 
         [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr ctx);
         [DllImport("user32.dll")] static extern bool GetCursorPos(out Point p);
@@ -155,6 +272,7 @@ namespace ControlCenterK
             int w = Math.Max(16, (int)(zone.Width * k) & ~1), h = Math.Max(16, (int)(zone.Height * k) & ~1);
             Error = null;
             Warning = null;
+            HidePreview();
             Zone = zone;
             Started = DateTime.Now;
             Recording = true;
@@ -207,6 +325,7 @@ namespace ControlCenterK
                         if (C.Recent.Count > 12) C.Recent.RemoveRange(12, C.Recent.Count - 12);
                     }
                     cfg.Save();
+                    RefreshPreview();
                     new CaptureToast("Vidéo enregistrée : " + Path.GetFileName(path) + (Warning != null ? " (" + Warning + ")" : ""), path).Show();
                 }
                 Raise();
@@ -479,30 +598,68 @@ namespace ControlCenterK
         }
     }
 
-    /// <summary>Raccourci global Ctrl+Alt+F11 (fenêtre de messages invisible).</summary>
+    /// <summary>Raccourcis globaux paramétrables (fenêtre de messages invisible). Texte : « Ctrl+Alt+F11 ».</summary>
     sealed class VideoHotKey : NativeWindow, IDisposable
     {
         [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
         [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr h, int id);
-        const int Id = 0x4C00;
-        readonly Action pressed;
+        readonly Dictionary<int, Action> actions = new Dictionary<int, Action>();
+        int next = 0x4C00;
 
-        public VideoHotKey(Action pressed)
+        public VideoHotKey() { CreateHandle(new CreateParams { Parent = new IntPtr(-3) /* HWND_MESSAGE */ }); }
+
+        /// <summary>false si le raccourci est invalide ou déjà pris par un autre programme (vide = rien à faire).</summary>
+        public bool Add(string text, Action a)
         {
-            this.pressed = pressed;
-            CreateHandle(new CreateParams { Parent = new IntPtr(-3) /* HWND_MESSAGE */ });
-            RegisterHotKey(Handle, Id, 0x1 | 0x2 | 0x4000 /* ALT | CTRL | NOREPEAT */, 0x7A /* F11 */);
+            if (string.IsNullOrEmpty(text)) return true;
+            Keys k = Parse(text);
+            if (k == Keys.None) return false;
+            uint mods = 0x4000; // MOD_NOREPEAT
+            if ((k & Keys.Alt) != 0) mods |= 1;
+            if ((k & Keys.Control) != 0) mods |= 2;
+            if ((k & Keys.Shift) != 0) mods |= 4;
+            int id = next++;
+            if (!RegisterHotKey(Handle, id, mods, (uint)(k & Keys.KeyCode))) return false;
+            actions[id] = a;
+            return true;
+        }
+
+        public static Keys Parse(string text)
+        {
+            Keys k = Keys.None;
+            foreach (var part in (text ?? "").Split('+'))
+            {
+                string p = part.Trim();
+                if (p == "Ctrl") k |= Keys.Control;
+                else if (p == "Alt") k |= Keys.Alt;
+                else if (p == "Maj" || p == "Shift") k |= Keys.Shift;
+                else
+                {
+                    Keys key;
+                    if (!Enum.TryParse(p, out key)) return Keys.None;
+                    k |= key;
+                }
+            }
+            return (k & Keys.KeyCode) == Keys.None ? Keys.None : k;
+        }
+
+        public static string Format(Keys k)
+        {
+            var key = k & Keys.KeyCode;
+            if (key == Keys.None || key == Keys.ControlKey || key == Keys.ShiftKey || key == Keys.Menu) return "";
+            return ((k & Keys.Control) != 0 ? "Ctrl+" : "") + ((k & Keys.Alt) != 0 ? "Alt+" : "") + ((k & Keys.Shift) != 0 ? "Maj+" : "") + key;
         }
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == 0x312 && m.WParam.ToInt32() == Id) pressed();
+            Action a;
+            if (m.Msg == 0x312 && actions.TryGetValue(m.WParam.ToInt32(), out a)) a();
             base.WndProc(ref m);
         }
 
         public void Dispose()
         {
-            UnregisterHotKey(Handle, Id);
+            foreach (int id in actions.Keys) UnregisterHotKey(Handle, id);
             DestroyHandle();
         }
     }

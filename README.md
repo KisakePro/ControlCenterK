@@ -100,7 +100,8 @@ Comme ShareX :
 - Dossier, nom des fichiers, PNG ou JPEG, action par défaut, liste des dernières captures.
 
 ### 🎬 Capture vidéo
-- Enregistre **une zone** (choisie à la souris) ou **l'écran sous la souris**, curseur compris ; raccourci **Ctrl+Alt+F11** pour démarrer et arrêter.
+- **Zones enregistrées** (tracées à la souris) ou **l'écran sous la souris**, curseur compris : on choisit la zone, puis on lance quand on veut.
+- Bouton **Enregistrer / Arrêter** et **raccourcis paramétrables** (par défaut Ctrl+Alt+F11 démarrer / arrêter, Ctrl+Maj+F11 tracer une zone).
 - **MP4** (H.264 + AAC) ou **WMV** encodés par Windows (carte graphique si possible), ou **AVI** Motion JPEG pour le montage (4 Go au plus).
 - **Son du PC**, **micro** ou les deux ; **taille de sortie** (d'origine, 4K, 1440p, 1080p, 720p, 480p) ; **10 à 60 images/s** ; trois qualités.
 - Le cadre rouge et le panneau d'arrêt n'apparaissent pas dans la vidéo. Les jeux en plein écran exclusif peuvent donner une image noire.

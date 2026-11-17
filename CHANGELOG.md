@@ -2,6 +2,12 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.9.1] - 2026-11-17 (BETA)
+
+- Capture vidéo : zones enregistrées (tracer, choisir, renommer, couleur, redéfinir, supprimer), « écran sous la souris » toujours disponible.
+- Bouton Enregistrer / Arrêter sur la zone choisie ; « Tracer une zone et enregistrer » pour aller vite ; cadre de la zone affiché au choix.
+- Raccourcis paramétrables : démarrer / arrêter, tracer une zone, tracer et enregistrer ; avertissement si une combinaison est déjà prise.
+
 ## [0.9] - 2026-11-17 (BETA)
 
 - Nouveau module « Capture vidéo » : enregistre une zone de l'écran ou l'écran sous la souris, curseur compris.
