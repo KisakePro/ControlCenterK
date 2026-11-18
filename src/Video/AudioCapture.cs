@@ -16,6 +16,7 @@ namespace ControlCenterK
         public const int Rate = 48000;
 
         readonly bool loopback;
+        readonly string deviceId;   // "default" = périphérique par défaut de Windows
         readonly Stopwatch clock;
         readonly Thread thread;
         readonly object sync = new object();
@@ -25,9 +26,10 @@ namespace ControlCenterK
         volatile bool stopping;
         public string Error;
 
-        public AudioSource(bool loopback, Stopwatch clock)
+        public AudioSource(bool loopback, string deviceId, Stopwatch clock)
         {
             this.loopback = loopback;
+            this.deviceId = deviceId;
             this.clock = clock;
             thread = new Thread(Run) { IsBackground = true, Name = loopback ? "Son du PC" : "Micro" };
             thread.Start();
@@ -76,7 +78,8 @@ namespace ControlCenterK
             {
                 var en = (IMMDeviceEnumerator)new MMDeviceEnumeratorCo();
                 IMMDevice dev;
-                en.GetDefaultAudioEndpoint(loopback ? Flow.Render : Flow.Capture, 0, out dev);
+                if (deviceId == "default") en.GetDefaultAudioEndpoint(loopback ? Flow.Render : Flow.Capture, 0, out dev);
+                else en.GetDevice(deviceId, out dev);
                 object o;
                 dev.Activate(ref Wasapi.IID_AudioClient, 23, IntPtr.Zero, out o);
                 client = (IAudioClient)o;
@@ -200,10 +203,11 @@ namespace ControlCenterK
         readonly List<AudioSource> sources = new List<AudioSource>();
         float[] tmp = new float[0], sum = new float[0];
 
-        public AudioMixer(bool system, bool mic, Stopwatch clock)
+        /// <summary>Identifiants de périphériques : "" = aucun, "default" = celui de Windows.</summary>
+        public AudioMixer(string output, string mic, Stopwatch clock)
         {
-            if (system) sources.Add(new AudioSource(true, clock));
-            if (mic) sources.Add(new AudioSource(false, clock));
+            if (!string.IsNullOrEmpty(output)) sources.Add(new AudioSource(true, output, clock));
+            if (!string.IsNullOrEmpty(mic)) sources.Add(new AudioSource(false, mic, clock));
         }
 
         public string Error

@@ -2,6 +2,13 @@
 
 Chaque section `## [x.y.z]` sert de notes à la Release GitHub correspondante.
 
+## [0.9.2] - 2026-11-18 (BETA)
+
+- Capture vidéo : son du PC et micro réglés séparément, au choix parmi les sorties et micros du mélangeur Windows.
+- Capture vidéo : liste des écrans disponibles (à la place de « écran sous la souris ») ; libellé du cadre corrigé.
+- Capture vidéo : saisie des raccourcis dans une petite fenêtre, raccourcis actifs coupés pendant la saisie (ils interceptaient la combinaison).
+- Barre latérale : les boutons se resserrent quand beaucoup de modules sont actifs, au lieu de passer sous « Paramètres ».
+
 ## [0.9.1] - 2026-11-17 (BETA)
 
 - Capture vidéo : zones enregistrées (tracer, choisir, renommer, couleur, redéfinir, supprimer), « écran sous la souris » toujours disponible.

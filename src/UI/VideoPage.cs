@@ -161,8 +161,7 @@ namespace ControlCenterK
                 SetNextY(c, stop.Bottom + Theme.S(8));
                 return c;
             }
-            var sel = VideoRecorder.SelectedZone;
-            string target = sel != null ? "Zone choisie : " + sel.Name + " (" + sel.W + " × " + sel.H + ")" : "Zone choisie : l'écran sous la souris";
+            string target = "Zone choisie : " + VideoRecorder.SelectedLabel;
             var info = Theme.Label(target, Theme.Semi(10f), Theme.Text, Theme.Card);
             info.Location = new Point(Theme.S(20), y + Theme.S(2));
             var rec = new FlatButton("Enregistrer" + KeyHint(toggleKey), true) { Glyph = "\uE7C8" };
@@ -196,7 +195,9 @@ namespace ControlCenterK
             lock (AppConfig.Sync) frameT.Checked = C.ShowFrame;
             frameT.Location = new Point(c.Width - frameT.Width - Theme.S(20), y + Theme.S(6));
             frameT.CheckedChanged += (s, e) => { lock (AppConfig.Sync) C.ShowFrame = frameT.Checked; cfg.Save(); VideoRecorder.RefreshPreview(); };
-            var frameL = Theme.Label("Toujours afficher le cadre", Theme.Ui(9f), Theme.Text, Theme.Card);
+            var frameL = Theme.Label("Toujours afficher le cadre de la zone choisie", Theme.Ui(9f), Theme.Text, Theme.Card);
+            frameL.AutoSize = false;
+            frameL.Size = TextRenderer.MeasureText(frameL.Text, frameL.Font) + new Size(Theme.S(4), Theme.S(2));
             frameL.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             frameL.Location = new Point(frameT.Left - frameL.Width - Theme.S(8), y + Theme.S(7));
             c.Controls.AddRange(new Control[] { frameT, frameL });
@@ -205,13 +206,36 @@ namespace ControlCenterK
             List<ShareZone> zones;
             string selected;
             lock (AppConfig.Sync) { zones = new List<ShareZone>(C.Zones); selected = C.Selected; }
-            y = ZoneRow(c, y, null, selected == "screen");
+            var mons = VideoRecorder.Monitors();
+            string selDev = selected.StartsWith("mon:") ? selected.Substring(4) : null;
+            // "mon:" seul (ou écran débranché) = écran principal
+            if (selDev != null && !mons.Exists(m => m.Device == selDev) && mons.Count > 0) selDev = mons[0].Device;
+            foreach (var m in mons) y = ScreenRow(c, y, m, m.Device == selDev);
             foreach (var z in zones) y = ZoneRow(c, y, z, z.Id == selected);
             SetNextY(c, y);
             return c;
         }
 
-        /// <summary>Une zone (z null = écran sous la souris) : choisir, renommer, couleur, redéfinir, supprimer.</summary>
+        /// <summary>Un écran entier.</summary>
+        int ScreenRow(Card c, int y, VideoRecorder.MonitorInfo m, bool selected)
+        {
+            var row = new Card { BackColor = selected ? Theme.Mix(Theme.Surface, Theme.Accent, 0.16f) : Theme.Surface, Radius = 6,
+                Bounds = new Rectangle(Theme.S(14), y, c.Width - Theme.S(28), Theme.S(48)), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            string id = "mon:" + m.Device;
+            var pick = new FlatButton(selected ? "Choisi" : "Choisir", selected) { Glyph = selected ? Glyphs.Check : null, Enabled = !selected };
+            pick.FitWidth();
+            pick.Location = new Point(Theme.S(8), Theme.S(8));
+            pick.Click += (s, e) => VideoRecorder.Select(id);
+            var icon = Theme.Label("\uE7F4", Theme.Icon(12f), Theme.Muted, row.BackColor);
+            icon.Location = new Point(pick.Right + Theme.S(14), Theme.S(14));
+            var n = Theme.Label(m.Name, Theme.Semi(9.5f), Theme.Text, row.BackColor);
+            n.Location = new Point(icon.Right + Theme.S(8), Theme.S(15));
+            row.Controls.AddRange(new Control[] { pick, icon, n });
+            c.Controls.Add(row);
+            return y + Theme.S(54);
+        }
+
+        /// <summary>Une zone tracée : choisir, renommer, couleur, redéfinir, supprimer.</summary>
         int ZoneRow(Card c, int y, ShareZone z, bool selected)
         {
             var color = z == null ? Theme.Accent : Theme.FromHex(z.Color, Color.Red);
@@ -271,7 +295,7 @@ namespace ControlCenterK
                     b.Click += (s, e) =>
                     {
                         if (MessageBox.Show(FindForm(), "Supprimer la zone « " + z.Name + " » ?", "Supprimer la zone", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
-                        lock (AppConfig.Sync) { C.Zones.RemoveAll(zz => zz.Id == id); if (C.Selected == id) C.Selected = "screen"; }
+                        lock (AppConfig.Sync) { C.Zones.RemoveAll(zz => zz.Id == id); if (C.Selected == id) C.Selected = "mon:"; }
                         cfg.Save();
                         VideoRecorder.RefreshPreview();
                         Rebuild();
@@ -317,6 +341,20 @@ namespace ControlCenterK
             return c;
         }
 
+        DropButton SoundDrop(List<DeviceInfo> devices, string none, Func<string> get, Action<string> set)
+        {
+            var d = new DropButton { Width = Theme.S(280) };
+            d.Add("", none);
+            d.Add("default", "Par défaut de Windows");
+            foreach (var dev in devices) d.Add(dev.Id, dev.Name + (dev.IsDefault ? " (par défaut)" : ""));
+            string cur;
+            lock (AppConfig.Sync) cur = get() ?? "";
+            if (cur.Length > 0 && cur != "default" && !devices.Exists(x => x.Id == cur)) d.Add(cur, "Périphérique débranché");
+            d.Value = cur;
+            d.ValueChanged += (s, e) => { lock (AppConfig.Sync) set(d.Value); cfg.Save(); };
+            return d;
+        }
+
         void KeyRow(Card c, string label, string desc, Func<string> get, Action<string> set)
         {
             string cur;
@@ -360,14 +398,13 @@ namespace ControlCenterK
             fps.ValueChanged += (s, e) => { lock (AppConfig.Sync) C.Fps = int.Parse(fps.Value); cfg.Save(); };
             Row(c, "Images par seconde", "60 images/s sur une grande zone peut sauter des images selon le PC.", fps);
 
-            var snd = new DropButton { Width = Theme.S(280) };
-            snd.Add("none", "Aucun son");
-            snd.Add("system", "Son du PC");
-            snd.Add("mic", "Micro");
-            snd.Add("both", "Son du PC + micro");
-            lock (AppConfig.Sync) snd.Value = C.Audio;
-            snd.ValueChanged += (s, e) => { lock (AppConfig.Sync) C.Audio = snd.Value; cfg.Save(); };
-            Row(c, "Son", "Sortie et micro par défaut de Windows, en 48 kHz stéréo (AAC dans le MP4, WMA dans le WMV, PCM dans l'AVI).", snd);
+            List<DeviceInfo> outs, mics;
+            try { var sys = new AudioSystem(); outs = sys.ListDevices(Flow.Render); mics = sys.ListDevices(Flow.Capture); }
+            catch { outs = new List<DeviceInfo>(); mics = new List<DeviceInfo>(); }
+            var sndOut = SoundDrop(outs, "Aucun son du PC", () => C.SoundOut, v => C.SoundOut = v);
+            Row(c, "Son du PC", "Ce que joue une sortie du mélangeur Windows (haut-parleurs, casque…). 48 kHz stéréo : AAC dans le MP4, WMA dans le WMV, PCM dans l'AVI.", sndOut);
+            var sndMic = SoundDrop(mics, "Aucun micro", () => C.SoundMic, v => C.SoundMic = v);
+            Row(c, "Micro", "Mélangé au son du PC s'ils sont tous les deux choisis.", sndMic);
 
             var q = new DropButton { Width = Theme.S(280) };
             q.Add("low", "Basse (fichiers légers)");
@@ -470,6 +507,61 @@ namespace ControlCenterK
         }
     }
 
+    /// <summary>Fenêtre de saisie d'un raccourci : la combinaison s'affiche en direct, OK pour valider.</summary>
+    sealed class HotKeyDialog : Form
+    {
+        public string Result = "";
+        readonly Label shown;
+        readonly FlatButton ok;
+
+        public HotKeyDialog()
+        {
+            Text = "Raccourci";
+            Icon = Program.AppIcon;
+            BackColor = Theme.Bg;
+            ForeColor = Theme.Text;
+            Font = Theme.Ui(9.5f);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = MinimizeBox = false;
+            StartPosition = FormStartPosition.CenterParent;
+            KeyPreview = true;
+            ClientSize = new Size(Theme.S(420), Theme.S(170));
+            var hint = Theme.Label("Appuyez sur la combinaison voulue (par exemple Ctrl+Alt+F11).\nÉchap : annuler · Suppr : aucun raccourci.", Theme.Ui(9f), Theme.Muted, Theme.Bg);
+            hint.Location = new Point(Theme.S(16), Theme.S(14));
+            shown = Theme.Label("…", Theme.Semi(16f), Theme.Accent, Theme.Bg);
+            shown.AutoSize = false;
+            shown.TextAlign = ContentAlignment.MiddleCenter;
+            shown.Bounds = new Rectangle(Theme.S(16), Theme.S(58), ClientSize.Width - Theme.S(32), Theme.S(44));
+            ok = new FlatButton("OK", true) { Enabled = false };
+            ok.FitWidth();
+            ok.Location = new Point(ClientSize.Width - ok.Width - Theme.S(16), ClientSize.Height - ok.Height - Theme.S(14));
+            ok.Click += (s, e) => { DialogResult = DialogResult.OK; Close(); };
+            var cancel = new FlatButton("Annuler");
+            cancel.FitWidth();
+            cancel.Location = new Point(ok.Left - cancel.Width - Theme.S(8), ok.Top);
+            cancel.Click += (s, e) => Close();
+            Controls.AddRange(new Control[] { hint, shown, ok, cancel });
+        }
+
+        // les touches arrivent ici avant les boutons (Entrée, Échap, flèches, Alt…)
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            var key = keyData & Keys.KeyCode;
+            if (key == Keys.Escape) { Close(); return true; }
+            if (key == Keys.Enter && ok.Enabled && (keyData & (Keys.Control | Keys.Alt | Keys.Shift)) == 0) { DialogResult = DialogResult.OK; Close(); return true; }
+            if (key == Keys.Delete || key == Keys.Back) { Result = ""; DialogResult = DialogResult.OK; Close(); return true; }
+            if (key == Keys.ControlKey || key == Keys.ShiftKey || key == Keys.Menu || key == Keys.LWin || key == Keys.RWin) return true;
+            // une touche seule bloquerait la frappe partout : modificateur obligatoire, sauf F1…F24
+            bool fkey = key >= Keys.F1 && key <= Keys.F24;
+            if ((keyData & (Keys.Control | Keys.Alt | Keys.Shift)) == 0 && !fkey) { shown.Text = "Ajoutez Ctrl, Alt ou Maj"; return true; }
+            Result = VideoHotKey.Format(keyData);
+            shown.Text = Result;
+            ok.Enabled = Result.Length > 0;
+            ok.Invalidate();
+            return true;
+        }
+    }
+
     /// <summary>Bouton qui capture une combinaison de touches (« Ctrl+Alt+F11 ») ; Échap annule, Suppr / Retour efface.</summary>
     sealed class HotKeyBox : DarkControl
     {
@@ -481,30 +573,20 @@ namespace ControlCenterK
 
         public string Value { get { return value; } set { this.value = value ?? ""; Invalidate(); } }
 
-        protected override void OnClick(EventArgs e) { base.OnClick(e); listening = true; Focus(); Invalidate(); }
-        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); listening = false; Invalidate(); }
-        protected override bool IsInputKey(Keys keyData) { return listening || base.IsInputKey(keyData); }
-
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        protected override void OnClick(EventArgs e)
         {
-            if (!listening) return base.ProcessCmdKey(ref msg, keyData);
-            var key = keyData & Keys.KeyCode;
-            if (key == Keys.Escape) { listening = false; Invalidate(); return true; }
-            if (key == Keys.Delete || key == Keys.Back) { Set(""); return true; }
-            if (key == Keys.ControlKey || key == Keys.ShiftKey || key == Keys.Menu || key == Keys.LWin || key == Keys.RWin) return true;
-            // une touche seule bloquerait la frappe partout : modificateur obligatoire, sauf F1…F24
-            bool fkey = key >= Keys.F1 && key <= Keys.F24;
-            if ((keyData & (Keys.Control | Keys.Alt | Keys.Shift)) == 0 && !fkey) return true;
-            Set(VideoHotKey.Format(keyData));
-            return true;
-        }
-
-        void Set(string v)
-        {
-            listening = false;
-            value = v;
+            base.OnClick(e);
+            listening = true;
             Invalidate();
-            if (ValueChanged != null) ValueChanged(this, EventArgs.Empty);
+            // les raccourcis déjà actifs sont coupés pendant la saisie : sinon Windows les intercepte avant nous
+            VideoRecorder.SuspendHotKeys();
+            string result;
+            try { using (var dlg = new HotKeyDialog()) result = dlg.ShowDialog(FindForm()) == DialogResult.OK ? dlg.Result : null; }
+            finally { listening = false; Invalidate(); }
+            if (result == null) { VideoRecorder.UpdateHotKey(); return; }
+            value = result;
+            Invalidate();
+            if (ValueChanged != null) ValueChanged(this, EventArgs.Empty); else VideoRecorder.UpdateHotKey();
         }
 
         protected override void OnPaint(PaintEventArgs e)

@@ -14,7 +14,9 @@ namespace ControlCenterK
         public string Format { get; set; }       // mp4, wmv, avi
         public int Fps { get; set; }             // 10, 15, 24, 25, 30, 50, 60
         public string Size { get; set; }         // source, 2160, 1440, 1080, 720, 480 : hauteur maximale de la vidéo
-        public string Audio { get; set; }        // none, system, mic, both
+        public string Audio { get; set; }        // ancien réglage (none, system, mic, both), repris une fois
+        public string SoundOut { get; set; }     // sortie enregistrée : "" aucune, "default", ou id du périphérique
+        public string SoundMic { get; set; }     // micro enregistré : "" aucun, "default", ou id du périphérique
         public string Quality { get; set; }      // low, medium, high
         public bool Cursor { get; set; }         // inclure le curseur
         public bool HotKey { get; set; }         // raccourcis actifs
@@ -22,7 +24,7 @@ namespace ControlCenterK
         public string KeyPick { get; set; }      // tracer une nouvelle zone (elle devient la zone choisie)
         public string KeyPickRecord { get; set; } // tracer une zone et enregistrer tout de suite
         public List<ShareZone> Zones { get; set; } // zones enregistrées
-        public string Selected { get; set; }     // id de la zone choisie ; "screen" = écran sous la souris
+        public string Selected { get; set; }     // id de la zone choisie, ou "mon:" + écran (\\.\DISPLAY1…)
         public bool ShowFrame { get; set; }      // cadre permanent autour de la zone choisie
         public string Folder { get; set; }       // "" = Vidéos\ControlCenterK
         public List<string> Recent { get; set; } // dernières vidéos
@@ -40,7 +42,7 @@ namespace ControlCenterK
             KeyPick = "Ctrl+Shift+F11";
             KeyPickRecord = "";
             Zones = new List<ShareZone>();
-            Selected = "screen";
+            Selected = "mon:";
             Folder = "";
             Recent = new List<string>();
         }
@@ -51,6 +53,8 @@ namespace ControlCenterK
             if (Array.IndexOf(new[] { 10, 15, 24, 25, 30, 50, 60 }, Fps) < 0) Fps = 30;
             if (Array.IndexOf(new[] { "2160", "1440", "1080", "720", "480" }, Size) < 0) Size = "source";
             if (Audio != "none" && Audio != "mic" && Audio != "both") Audio = "system";
+            if (SoundOut == null) SoundOut = Audio == "system" || Audio == "both" ? "default" : "";
+            if (SoundMic == null) SoundMic = Audio == "mic" || Audio == "both" ? "default" : "";
             if (Quality != "low" && Quality != "high") Quality = "medium";
             if (Folder == null) Folder = "";
             if (Recent == null) Recent = new List<string>();
@@ -58,7 +62,7 @@ namespace ControlCenterK
             if (KeyToggle == null) KeyToggle = "Ctrl+Alt+F11";
             if (KeyPick == null) KeyPick = "Ctrl+Shift+F11";
             if (KeyPickRecord == null) KeyPickRecord = "";
-            if (Selected != "screen" && Find(Selected) == null) Selected = "screen";
+            if (Selected == null || (!Selected.StartsWith("mon:") && Find(Selected) == null)) Selected = "mon:"; // "mon:" seul = écran principal
         }
 
         public ShareZone Find(string id) { return Zones.Find(z => z.Id == id); }
@@ -150,8 +154,8 @@ namespace ControlCenterK
                 var z = C.Find(sel);
                 if (z != null) r = z.Rect;
             }
-            if (sel == "screen" || r.Width < 16 || r.Height < 16) StartScreen();
-            else Start(r);
+            if (r.Width < 16 || r.Height < 16) r = MonitorRect(sel);
+            if (r.Width >= 16) Start(r);
         }
 
         /// <summary>Trace une nouvelle zone à la souris ; elle est enregistrée et devient la zone choisie.</summary>
@@ -191,7 +195,73 @@ namespace ControlCenterK
             Raise();
         }
 
-        /// <summary>Zone choisie actuellement (null = écran sous la souris).</summary>
+        /// <summary>Écran disponible (pixels physiques).</summary>
+        public sealed class MonitorInfo
+        {
+            public string Device, Name;
+            public Rectangle Bounds;
+            public bool Primary;
+        }
+
+        [DllImport("user32.dll")] static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorEnum cb, IntPtr data);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFOEX mi);
+        delegate bool MonitorEnum(IntPtr m, IntPtr dc, IntPtr rect, IntPtr data);
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct MONITORINFOEX { public int Size; public RECT Monitor, Work; public int Flags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Device; }
+
+        /// <summary>Écrans branchés, principal en premier, puis de gauche à droite.</summary>
+        public static List<MonitorInfo> Monitors()
+        {
+            var list = new List<MonitorInfo>();
+            var prev = SetThreadDpiAwarenessContext(new IntPtr(-4));
+            try
+            {
+                EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (m, dc, rc, d) =>
+                {
+                    var mi = new MONITORINFOEX { Size = Marshal.SizeOf(typeof(MONITORINFOEX)) };
+                    if (GetMonitorInfo(m, ref mi))
+                        list.Add(new MonitorInfo { Device = mi.Device, Primary = (mi.Flags & 1) != 0,
+                            Bounds = Rectangle.FromLTRB(mi.Monitor.L, mi.Monitor.T, mi.Monitor.R, mi.Monitor.B) });
+                    return true;
+                }, IntPtr.Zero);
+            }
+            finally { SetThreadDpiAwarenessContext(prev); }
+            list.Sort((a, b) => a.Primary != b.Primary ? (a.Primary ? -1 : 1) : a.Bounds.X.CompareTo(b.Bounds.X));
+            for (int i = 0; i < list.Count; i++)
+                list[i].Name = "Écran " + (i + 1) + (list[i].Primary ? " (principal)" : "") + "  ·  " + list[i].Bounds.Width + " × " + list[i].Bounds.Height;
+            return list;
+        }
+
+        /// <summary>Rectangle d'un écran ("mon:" + nom Windows) ; l'écran principal s'il n'est plus branché.</summary>
+        static Rectangle MonitorRect(string sel)
+        {
+            var mons = Monitors();
+            if (mons.Count == 0) return Rectangle.Empty;
+            string dev = sel != null && sel.StartsWith("mon:") ? sel.Substring(4) : "";
+            var m = mons.Find(x => x.Device == dev);
+            return (m ?? mons[0]).Bounds;
+        }
+
+        /// <summary>Texte de la zone choisie, pour la page.</summary>
+        public static string SelectedLabel
+        {
+            get
+            {
+                var z = SelectedZone;
+                if (z != null) return z.Name + " (" + z.W + " × " + z.H + ")";
+                string sel;
+                lock (AppConfig.Sync) sel = C.Selected;
+                var mons = Monitors();
+                string dev = sel != null && sel.StartsWith("mon:") ? sel.Substring(4) : "";
+                var m = mons.Find(x => x.Device == dev) ?? (mons.Count > 0 ? mons[0] : null);
+                return m != null ? m.Name : "écran principal";
+            }
+        }
+
+        /// <summary>Raccourcis coupés le temps d'en saisir un nouveau (sinon Windows les intercepte).</summary>
+        public static void SuspendHotKeys() { if (hotKey != null) { hotKey.Dispose(); hotKey = null; } }
+
+        /// <summary>Zone tracée choisie (null = un écran entier).</summary>
         public static ShareZone SelectedZone
         {
             get { lock (AppConfig.Sync) return cfg == null ? null : C.Find(C.Selected); }
@@ -252,9 +322,9 @@ namespace ControlCenterK
             if (Recording) return;
             string fmt, dir;
             int fps;
-            string q, size, audio;
+            string q, size, sndOut, sndMic;
             bool cursor;
-            lock (AppConfig.Sync) { fmt = C.Format; fps = C.Fps; q = C.Quality; cursor = C.Cursor; dir = C.FolderPath; size = C.Size; audio = C.Audio; }
+            lock (AppConfig.Sync) { fmt = C.Format; fps = C.Fps; q = C.Quality; cursor = C.Cursor; dir = C.FolderPath; size = C.Size; sndOut = C.SoundOut; sndMic = C.SoundMic; }
             try
             {
                 Directory.CreateDirectory(dir);
@@ -281,7 +351,7 @@ namespace ControlCenterK
             string path = outPath;
             // une seule horloge pour l'image et le son : ils restent synchronisés
             var clock = Stopwatch.StartNew();
-            var mixer = audio == "none" ? null : new AudioMixer(audio != "mic", audio != "system", clock);
+            var mixer = string.IsNullOrEmpty(sndOut) && string.IsNullOrEmpty(sndMic) ? null : new AudioMixer(sndOut, sndMic, clock);
             encoder = new Thread(() => Encode(queue, path, fmt, w, h, fps, q, mixer)) { IsBackground = true, Name = "Encodage vidéo" };
             capture = new Thread(() => Capture(queue, zone, w, h, fps, cursor, clock)) { IsBackground = true, Name = "Capture vidéo" };
             encoder.Start();
