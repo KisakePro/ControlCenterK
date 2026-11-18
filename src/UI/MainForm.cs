@@ -153,7 +153,27 @@ namespace ControlCenterK
         }
 
         /// <summary>Place les boutons de navigation selon les modules actifs.</summary>
+        int navH, navGap;
+
+        /// <summary>
+        /// Barre latérale : les boutons rapetissent (42 → 30 px) quand trop de modules sont actifs pour la hauteur
+        /// de la fenêtre ; s'ils ne tiennent toujours pas, la fenêtre ne peut plus être réduite en dessous du nécessaire.
+        /// </summary>
         void LayoutNav()
+        {
+            int settingsTop = side.ClientSize.Height - Theme.S(56) - navSettings.Height - Theme.S(4);
+            for (int h = 42; h >= 30; h -= 2)
+            {
+                navH = Theme.S(h);
+                navGap = Theme.S(h >= 38 ? 2 : 0);
+                if (LayoutNavOnce() <= settingsTop - Theme.S(12)) { MinimumSize = new Size(MinimumSize.Width, Theme.S(700)); return; }
+            }
+            int over = LayoutNavOnce() - (settingsTop - Theme.S(12));
+            if (over > 0 && WindowState == FormWindowState.Normal) MinimumSize = new Size(MinimumSize.Width, Math.Max(Theme.S(700), Height + over));
+        }
+
+        /// <summary>Place tout et renvoie le bas du dernier bouton de module.</summary>
+        int LayoutNavOnce()
         {
             var cfg = engine.Cfg;
             separators.Clear();
@@ -175,6 +195,7 @@ namespace ControlCenterK
             navSettings.SetBounds(0, side.ClientSize.Height - Theme.S(56) - navSettings.Height - Theme.S(4), side.Width, navSettings.Height);
             separators.Add(navSettings.Top - Theme.S(8));
             side.Invalidate();
+            return y;
         }
 
         /// <summary>Place une section de la barre latérale (titre + boutons des modules actifs) et renvoie le Y suivant.</summary>
@@ -195,8 +216,8 @@ namespace ControlCenterK
             for (int i = 0; i < navs.Length; i++)
             {
                 if (!on[i]) continue;
-                navs[i].SetBounds(0, y, side.Width, navs[i].Height);
-                y += navs[i].Height + Theme.S(2);
+                navs[i].SetBounds(0, y, side.Width, navH);
+                y += navH + navGap;
             }
             return y + Theme.S(4);
         }
